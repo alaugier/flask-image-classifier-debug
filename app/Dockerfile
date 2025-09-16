@@ -8,7 +8,8 @@ ENV FLASK_APP=app_correct.py
 ENV FLASK_ENV=production
 
 # Installation des dépendances système
-RUN apt-get update && apt-get install -y \
+RUN apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libgl1-mesa-glx \
