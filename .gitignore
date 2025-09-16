@@ -1,0 +1,40 @@
+# Environnements virtuels
+env_debug/
+venv/
+.venv/
+env/
+
+# Fichiers de logs (optionnel — tu peux les inclure pour le debug, mais pas obligatoire)
+app/logs/
+tests/logs/
+
+# Fichiers générés par Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.ipynb_checkpoints/
+
+# Fichiers de configuration locale / secrets
+.env
+*.env
+config.cfg  # si tu en crées un pour flask-monitoringdashboard
+
+# Fichiers de base de données SQLite (optionnel — si tu veux les exclure)
+*.db
+*.sqlite3
+
+# Dossiers de build / packaging
+build/
+dist/
+*.egg-info/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers de sauvegarde
+*.bak
+*.swp
+*~
