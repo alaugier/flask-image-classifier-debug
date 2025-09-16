@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copier l'application
 COPY app/ ./app/
-COPY test_app.py .
+COPY tests/test_app.py .
 
 # Créer les répertoires nécessaires
 RUN mkdir -p logs static/uploads
