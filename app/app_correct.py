@@ -1,4 +1,6 @@
 import os
+os.environ["KERAS_BACKEND"] = "torch"
+
 import io
 import base64
 import logging
