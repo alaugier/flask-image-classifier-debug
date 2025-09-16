@@ -1,6 +1,13 @@
 import os
 os.environ["KERAS_BACKEND"] = "torch"
 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import io
 import base64
 import logging
@@ -37,6 +44,15 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "final_cnn.keras")
 
+# ✅ Optimisations mémoire PyTorch (à ajouter AVANT d'importer keras ou de charger le modèle)
+import torch
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
+
+# Désactiver les optimisations CUDA (même si GPU absent)
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+
 try:
     model = keras.saving.load_model(MODEL_PATH, compile=False)
     logger.info(f"Modèle chargé avec succès depuis {MODEL_PATH}")
@@ -52,7 +68,14 @@ try:
         MODEL_HEIGHT = MODEL_WIDTH = 224
         
     logger.info(f"Dimensions cibles pour le preprocessing: {MODEL_HEIGHT}x{MODEL_WIDTH}")
-    
+
+    # ✅ "Warm up" du modèle (à ajouter APRES le chargement)
+    # Crée un tenseur vide de la bonne forme et fait une prédiction factice
+    logger.info("Warming up model...")
+    dummy_input = np.zeros((1, MODEL_HEIGHT, MODEL_WIDTH, 3), dtype=np.float32)
+    _ = model.predict(dummy_input, verbose=0)
+    logger.info("Model warmed up successfully.")
+
 except Exception as e:
     logger.error(f"Erreur lors du chargement du modèle: {e}")
     raise
@@ -287,4 +310,6 @@ if __name__ == "__main__":
     logs_dir = os.path.join(BASE_DIR, 'logs')
     os.makedirs(logs_dir, exist_ok=True)
     logger.info("Démarrage de l'application Flask")
-    app.run(debug=True)
+    
+    # ❌ Désactive le mode debug en production
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
