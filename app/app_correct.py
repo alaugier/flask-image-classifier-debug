@@ -48,6 +48,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Alerting
+# Après la configuration du logger
+if not app.debug:
+    from logging.handlers import SMTPHandler
+    mail_handler = SMTPHandler(
+        mailhost='smtp.gmail.com',
+        fromaddr=os.getenv('ALERT_EMAIL'),
+        toaddrs=[os.getenv('ALERT_EMAIL_RECIPIENT', os.getenv('ALERT_EMAIL'))],
+        subject='🚨 ERREUR CRITIQUE - App Classification',
+        credentials=(os.getenv('ALERT_EMAIL'), os.getenv('ALERT_EMAIL_PASSWORD')),
+        secure=()
+    )
+    mail_handler.setLevel(logging.ERROR)
+    mail_handler.setFormatter(logging.Formatter(
+        '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+    ))
+    app.logger.addHandler(mail_handler)
+    logger.info("✅ Alerting par email activé pour les erreurs critiques.")
+
 # ✅ Charger les variables d'environnement depuis .env en local (optionnel)
 env_path = os.path.join(os.path.dirname(BASE_DIR), '.env')  # ← Chemin vers la racine du projet
 if os.path.exists(env_path):
