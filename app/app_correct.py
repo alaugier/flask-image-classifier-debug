@@ -19,6 +19,8 @@ from werkzeug.utils import secure_filename
 import numpy as np
 import keras
 
+from pymongo import MongoClient
+import urllib.parse
 from PIL import Image
 
 # ---------------- Config ----------------
@@ -28,20 +30,43 @@ CLASSES = ['desert', 'forest', 'meadow', 'mountain']
 
 app = Flask(__name__)
 
+# ✅ Créer le dossier de logs AVANT de configurer le logging
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+logs_dir = os.path.join(BASE_DIR, 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler('logs/app.log'),
+        logging.FileHandler(os.path.join(logs_dir, 'app.log')),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
+# ✅ Charger les variables d'environnement depuis .env en local (optionnel)
+env_path = os.path.join(os.path.dirname(BASE_DIR), '.env')  # ← Chemin vers la racine du projet
+if os.path.exists(env_path):
+    from dotenv import load_dotenv
+    load_dotenv(env_path)  # ← Charge le .env depuis la racine
+    logger.info("✅ Variables d'environnement chargées depuis .env")
+
+MONGO_URI = os.getenv("MONGO_URI")
+if MONGO_URI:
+    try:
+        client = MongoClient(MONGO_URI)
+        db = client.flask_feedback
+        feedback_collection = db.user_feedback
+        logger.info("✅ Connexion à MongoDBAtlas établie.")
+    except Exception as e:
+        logger.error(f"❌ Erreur de connexion àMongoDBAtlas : {e}")
+else:
+    logger.warning("⚠️ MONGO_URI non définie — feedback non enregistré.")
+
 # ---------------- Model ----------------
 # Chemin absolu vers le modèle (relatif au fichier app.py)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "final_cnn.keras")
 
 # ✅ Optimisations mémoire PyTorch (à ajouter AVANT d'importer keras ou de charger le modèle)
@@ -157,37 +182,46 @@ def preprocess_from_pil(pil_img: Image.Image) -> np.ndarray:
     return img_array
 
 def save_feedback_to_db(image_data, predicted_label, predicted_confidence, user_label, timestamp):
-    """Sauvegarde le feedback utilisateur (simulation - à remplacer par une vraie DB).
+    """Sauvegarde le feedback utilisateur dansMongoDB Atlas.
     
     Args:
-        image_data: Image en base64
-        predicted_label: Classe prédite par le modèle
-        predicted_confidence: Confiance de la prédiction
-        user_label: Classe choisie par l'utilisateur
-        timestamp: Timestamp de la soumission
+        image_data (str): Image encodée en base64 (ex: "image/jpeg;base64,/9j/4AAQ...")
+        predicted_label (str): Classe prédite par le modèle (ex: "forest")
+        predicted_confidence (float):Score de confiance du modèle (0.0 à 1.0)
+        user_label (str):Classe choisie par l'utilisateur (feedback)
+        timestamp (str):Timestamp ISO 8601 de la soumission (ex: "2025-09-16T13:45:22.123456")
+    
+    Returns:
+        None
+    
+    Logs:
+        - INFO si le feedback est sauvegardé avec succès.
+        -ERROR si une exception est levée.
+        -WARNING si la base de données n'est pas initialisée.
+    
+    Example:
+        >>> save_feedback_to_db("image/...", "meadow", 0.975, "forest", "2025-09-16T13:45:22")
+        # Enregistre un document dansMongoDB Atlas.
     """
-    # Pour l'instant, on sauvegarde dans un fichier (à remplacer par une base de données)
-    feedback_entry = {
-        'timestamp': timestamp,
-        'predicted_label': predicted_label,
-        'predicted_confidence': predicted_confidence,
-        'user_label': user_label,
-        'image_data': image_data[:100] + "..." if len(image_data) > 100 else image_data  # Tronqué pour les logs
-    }
-    
-    logger.info(f"Feedback enregistré: {feedback_entry}")
-    
-    # TODO: Implémenter la sauvegarde en base de données
-    # Exemple avec SQLAlchemy:
-    # feedback = Feedback(
-    #     image_data=image_data,
-    #     predicted_label=predicted_label,
-    #     predicted_confidence=predicted_confidence,
-    #     user_label=user_label,
-    #     timestamp=timestamp
-    # )
-    # db.session.add(feedback)
-    # db.session.commit()
+    if 'feedback_collection' not in globals():
+        logger.warning("Base de données non initialisée — feedback non enregistré.")
+        return
+
+    try:
+        feedback_entry = {
+            "timestamp": timestamp,
+            "image_data": image_data,
+            "predicted_label": predicted_label,
+            "confidence": predicted_confidence,
+            "user_label": user_label,
+            "is_correct": predicted_label == user_label
+        }
+        
+        result = feedback_collection.insert_one(feedback_entry)
+        logger.info(f"✅ Feedback sauvegardé dansMongo avec ID : {result.inserted_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur lors de la sauvegarde dansMongo : {e}", exc_info=True)
 
 # ---------------- Routes ----------------
 @app.route("/", methods=["GET"])
