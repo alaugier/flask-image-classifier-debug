@@ -1,0 +1,3 @@
+Ajout d'une variable d'environnement dans l'exécution de l'application
+
+KERAS_BACKEND=torch python app.py

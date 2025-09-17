@@ -48,31 +48,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Alerting
-# Après la configuration du logger
-if not app.debug:
-    from logging.handlers import SMTPHandler
-    mail_handler = SMTPHandler(
-        mailhost='smtp.gmail.com',
-        fromaddr=os.getenv('ALERT_EMAIL'),
-        toaddrs=[os.getenv('ALERT_EMAIL_RECIPIENT', os.getenv('ALERT_EMAIL'))],
-        subject='🚨 ERREUR CRITIQUE - App Classification',
-        credentials=(os.getenv('ALERT_EMAIL'), os.getenv('ALERT_EMAIL_PASSWORD')),
-        secure=()
-    )
-    mail_handler.setLevel(logging.ERROR)
-    mail_handler.setFormatter(logging.Formatter(
-        '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
-    ))
-    app.logger.addHandler(mail_handler)
-    logger.info("✅ Alerting par email activé pour les erreurs critiques.")
-
 # ✅ Charger les variables d'environnement depuis .env en local (optionnel)
 env_path = os.path.join(os.path.dirname(BASE_DIR), '.env')  # ← Chemin vers la racine du projet
 if os.path.exists(env_path):
     from dotenv import load_dotenv
     load_dotenv(env_path)  # ← Charge le .env depuis la racine
     logger.info("✅ Variables d'environnement chargées depuis .env")
+
+# ✅ Alerting par email (uniquement en production)
+if os.getenv('FLASK_ENV') == 'production':
+    # Vérifier que toutes les variables nécessaires sont présentes
+    required_vars = ['ALERT_EMAIL', 'ALERT_EMAIL_PASSWORD']
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
+    if missing_vars:
+        logger.error(f"❌ Variables d'environnement manquantes pour l'alerting: {missing_vars}")
+    else:
+        try:
+            from logging.handlers import SMTPHandler
+            mail_handler = SMTPHandler(
+                mailhost=('smtp.gmail.com', 587),  # ✅ Tuple avec port
+                fromaddr=os.getenv('ALERT_EMAIL'),
+                toaddrs=[os.getenv('ALERT_EMAIL_RECIPIENT', os.getenv('ALERT_EMAIL'))],
+                subject='🚨 ERREUR CRITIQUE - App Classification',
+                credentials=(os.getenv('ALERT_EMAIL'), os.getenv('ALERT_EMAIL_PASSWORD')),
+                secure=()  # ✅ Utilise STARTTLS
+            )
+            mail_handler.setLevel(logging.ERROR)
+            mail_handler.setFormatter(logging.Formatter(
+                '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+            ))
+            logger.addHandler(mail_handler)  # ✅ Ajouté au logger configuré, pas app.logger
+            logger.info("✅ Alerting par email activé pour les erreurs critiques.")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la configuration de l'alerting: {e}", exc_info=True)
+else:
+    logger.info("ℹ️ Mode développement - Alerting email désactivé")
 
 MONGO_URI = os.getenv("MONGO_URI")
 if MONGO_URI:
@@ -314,8 +326,13 @@ def predict():
         # Préprocessing avec redimensionnement
         img_array = preprocess_from_pil(pil_img)
 
-        # Prédiction
-        probs = model.predict(img_array, verbose=0)[0]
+        # Prédiction avec wrapper pour capturer les erreurs spécifiques
+        try:
+            probs = model.predict(img_array, verbose=0)[0]
+        except Exception as pred_error:
+            logger.error(f"❌ ERREUR DE PRÉDICTION: {type(pred_error).__name__}: {pred_error}", exc_info=True)
+            raise  # Re-lance l'erreur pour que le try/catch externe la gère
+
         cls_idx = int(np.argmax(probs))
         label = CLASSES[cls_idx]
         conf = float(probs[cls_idx])

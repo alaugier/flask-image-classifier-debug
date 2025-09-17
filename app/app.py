@@ -1,4 +1,59 @@
 import os
+import logging
+from logging.handlers import SMTPHandler
+
+# ✅ Charger les variables d'environnement depuis .env en local
+if os.path.exists(".env"):
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Variables d'environnement chargées depuis .env")
+
+# ✅ Créer le dossier de logs AVANT de configurer le logging
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+logs_dir = os.path.join(BASE_DIR, 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
+# ✅ Configuration du logger racine (capture TOUTES les erreurs, même au démarrage)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+    handlers=[
+        logging.FileHandler(os.path.join(logs_dir, 'app.log')),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger()  # ← Logger racine — capture tout, même avant Flask
+
+# ✅ Alerting par email (uniquement en production)
+if os.getenv('FLASK_ENV') == 'production':
+    # Vérifier que toutes les variables nécessaires sont présentes
+    required_vars = ['ALERT_EMAIL', 'ALERT_EMAIL_PASSWORD']
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
+    if missing_vars:
+        logger.error(f"❌ Variables d'environnement manquantes pour l'alerting: {missing_vars}")
+    else:
+        try:
+            mail_handler = SMTPHandler(
+                mailhost=('smtp.gmail.com', 587),
+                fromaddr=os.getenv('ALERT_EMAIL'),
+                toaddrs=[os.getenv('ALERT_EMAIL_RECIPIENT', os.getenv('ALERT_EMAIL'))],
+                subject='🚨 ERREUR CRITIQUE - App Classification',
+                credentials=(os.getenv('ALERT_EMAIL'), os.getenv('ALERT_EMAIL_PASSWORD')),
+                secure=()
+            )
+            mail_handler.setLevel(logging.ERROR)
+            mail_handler.setFormatter(logging.Formatter(
+                '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+            ))
+            logger.addHandler(mail_handler)
+            logger.info("✅ Alerting par email activé pour les erreurs critiques.")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la configuration de l'alerting: {e}", exc_info=True)
+else:
+    logger.info("ℹ️ Mode développement - Alerting email désactivé")
+
 import io
 import base64
 
@@ -18,7 +73,8 @@ CLASSES = ['desert', 'forest', 'meadow', 'mountain']
 app = Flask(__name__)
 
 # ---------------- Model ----------------
-MODEL_PATH = "models/final_cnn.keras"
+# MODEL_PATH = "models/final_cnn.keras"
+MODEL_PATH = os.path.join(BASE_DIR, "models", "final_cnn.keras")
 model = keras.saving.load_model(MODEL_PATH, compile=False)
 
 # ---------------- Utils ----------------
@@ -96,15 +152,15 @@ def index():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    """Traite l’upload, exécute la prédiction et affiche le résultat.
+    """Traite l'upload, exécute la prédiction et affiche le résultat.
 
     Attendu: une requête `multipart/form-data` avec le champ `file`.
     Étapes:
-      1) Validation de présence et d’extension du fichier.
-      2) Lecture du contenu en mémoire et ouverture en PIL.
-      3) Prétraitement -> tenseur (1, H, W, 3).
-      4) Prédiction Keras -> probas, top-1 (label, confiance).
-      5) Encodage de l’image en Data URL et rendu du template résultat.
+    1) Validation de présence et d'extension du fichier.
+    2) Lecture du contenu en mémoire et ouverture en PIL.
+    3) Prétraitement -> tenseur (1, H, W, 3).
+    4) Prédiction Keras -> probas, top-1 (label, confiance).
+    5) Encodage de l'image en Data URL et rendu du template résultat.
 
     Redirects:
         - Redirige vers "/" si le fichier est manquant ou invalide.
@@ -124,18 +180,30 @@ def predict():
     if file.filename == "" or not allowed_file(secure_filename(file.filename)):
         return redirect("/")
 
-    raw = file.read()
-    pil_img = Image.open(io.BytesIO(raw))
-    img_array = preprocess_from_pil(pil_img)
+    try:
+        raw = file.read()
+        pil_img = Image.open(io.BytesIO(raw))
+        img_array = preprocess_from_pil(pil_img)
 
-    probs = model.predict(img_array, verbose=0)[0]
-    cls_idx = int(np.argmax(probs))
-    label = CLASSES[cls_idx]
-    conf = float(probs[cls_idx])
+        # ✅ Wrapper pour capturer les erreurs de prédiction
+        try:
+            probs = model.predict(img_array, verbose=0)[0]
+        except Exception as pred_error:
+            logger.error(f"❌ ERREUR DE PRÉDICTION: {type(pred_error).__name__}: {pred_error}", exc_info=True)
+            raise  # Re-lance l'erreur pour que le try/catch externe la gère
+        cls_idx = int(np.argmax(probs))
+        label = CLASSES[cls_idx]
+        conf = float(probs[cls_idx])
 
-    image_data_url = to_data_url(pil_img, fmt="JPEG")
+        image_data_url = to_data_url(pil_img, fmt="JPEG")
 
-    return render_template("result.html", image_data_url=image_data_url, predicted_label=label, confidence=conf, classes=CLASSES)
+        return render_template("result.html", image_data_url=image_data_url, predicted_label=label, confidence=conf, classes=CLASSES)
+
+    except Exception as e:
+        # ✅ Capture TOUTES les erreurs (y compris ValueError) et les logue
+        logger.error(f"❌ ERREUR CRITIQUE - Échec de prédiction pour {file.filename}: {type(e).__name__}: {e}", exc_info=True)
+        # Retourner une page d'erreur ou rediriger
+        return redirect("/")  # Ou return "Erreur de prédiction", 500
 
 @app.route("/feedback", methods=["GET"])
 def feedback_ok():
