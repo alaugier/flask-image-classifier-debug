@@ -12,6 +12,8 @@ import io
 import base64
 import logging
 from datetime import datetime
+from functools import wraps
+import time
 
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from werkzeug.utils import secure_filename
@@ -223,6 +225,22 @@ def save_feedback_to_db(image_data, predicted_label, predicted_confidence, user_
     except Exception as e:
         logger.error(f"❌ Erreur lors de la sauvegarde dansMongo : {e}", exc_info=True)
 
+def rate_limit(max_per_minute):
+    min_interval = 60.0 / max_per_minute
+    def decorator(func):
+        last_called = [0.0]
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            elapsed = time.time() - last_called[0]
+            left_to_wait = min_interval - elapsed
+            if left_to_wait > 0:
+                time.sleep(left_to_wait)
+            ret = func(*args, **kwargs)
+            last_called[0] = time.time()
+            return ret
+        return wrapper
+    return decorator
+
 # ---------------- Routes ----------------
 @app.route("/", methods=["GET"])
 def index():
@@ -235,6 +253,7 @@ def index():
     return render_template("upload.html")
 
 @app.route("/predict", methods=["POST"])
+@rate_limit(10)  # Max 10 requêtes par minute
 def predict():
     """Traite l'upload, exécute la prédiction et affiche le résultat.
 
