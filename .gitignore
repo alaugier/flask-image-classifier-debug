@@ -43,3 +43,5 @@ Thumbs.db
 *.csv
 token.txt
 mongodb_atlas_config.txt
+Ajout_var_env_backend_torch_plus_lancement_app.txt
+
