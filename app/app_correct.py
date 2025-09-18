@@ -18,6 +18,8 @@ import time
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from werkzeug.utils import secure_filename
 
+import flask_monitoringdashboard as dashboard
+
 import numpy as np
 import keras
 
@@ -47,6 +49,23 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# ✅ Ajouter un formateur de log avec contexte requête
+class RequestFormatter(logging.Formatter):
+    def format(self, record):
+        from flask import has_request_context, request
+        if has_request_context():
+            record.url = request.url
+            record.remote_addr = request.remote_addr
+        else:
+            record.url = record.remote_addr = "N/A"
+        return super().format(record)
+
+# Appliquer le formateur à tous les handlers
+for handler in logger.handlers:
+    handler.setFormatter(RequestFormatter(
+        '[%(asctime)s] %(levelname)s | %(remote_addr)s | %(url)s | %(message)s'
+    ))
 
 # ✅ Charger les variables d'environnement depuis .env en local (optionnel)
 env_path = os.path.join(os.path.dirname(BASE_DIR), '.env')  # ← Chemin vers la racine du projet
@@ -97,6 +116,54 @@ if MONGO_URI:
         logger.error(f"❌ Erreur de connexion àMongoDBAtlas : {e}")
 else:
     logger.warning("⚠️ MONGO_URI non définie — feedback non enregistré.")
+
+# Configuration explicite avant bind
+def get_or_generate_security_token():
+    """Récupère ou génère un token de sécurité"""
+    token = os.getenv('FLASK_MONITORING_TOKEN')
+    if not token:
+        import secrets
+        token = secrets.token_urlsafe(48)
+        logger.warning(f"⚠️ Token de sécurité généré automatiquement: {token}")
+        logger.warning("⚠️ Ajoutez FLASK_MONITORING_TOKEN={} à vos variables d'environnement pour la production!".format(token))
+    return token
+
+# Configuration du dashboard
+config_path = os.path.join(BASE_DIR, 'config.cfg')
+if os.path.exists(config_path):
+    # Charger d'abord la configuration depuis le fichier
+    dashboard.config.init_from(file=config_path)
+    logger.info("✅ Configuration dashboard chargée depuis config.cfg")
+    
+    # Puis override les paramètres sensibles depuis les variables d'environnement
+    dashboard.config.username = os.getenv('DASHBOARD_USERNAME', dashboard.config.username)
+    dashboard.config.password = os.getenv('DASHBOARD_PASSWORD', dashboard.config.password)
+else:
+    # Configuration par défaut si pas de fichier
+    dashboard.config.username = os.getenv('DASHBOARD_USERNAME', 'admin')
+    dashboard.config.password = os.getenv('DASHBOARD_PASSWORD', 'admin')
+    logger.info("⚠️ Configuration dashboard par défaut appliquée")
+
+# Le token de sécurité est toujours géré programmatiquement (priorité aux variables d'env)
+dashboard.config.security_token = get_or_generate_security_token()
+
+# ✅ CORRECTION: Configuration base de données SQLite pour le dashboard de monitoring
+# Flask-MonitoringDashboard utilise SQLAlchemy et ne supporte que les DB relationnelles
+dashboard_db_path = os.path.join(BASE_DIR, 'monitoring_dashboard.db')
+dashboard.config.database_name = f'sqlite:///{dashboard_db_path}'
+dashboard.config.table_prefix = 'fmd_'
+logger.info(f"✅ Configuration SQLite dashboard appliquée: {dashboard_db_path}")
+
+# Vérification de la configuration avant bind
+logger.info(f"Dashboard config - Username: {dashboard.config.username}")
+logger.info(f"Dashboard config - Database: {getattr(dashboard.config, 'database_name', 'Not set')}")
+logger.info(f"Dashboard config - Token configuré: {'Oui' if dashboard.config.security_token else 'Non'}")
+
+dashboard.bind(app)
+logger.info("✅ Flask-MonitoringDashboard initialisé")
+
+# Note: MongoDB reste utilisé pour votre application (feedback utilisateur)
+# SQLite est utilisé uniquement pour les métriques de monitoring
 
 # ---------------- Model ----------------
 # Chemin absolu vers le modèle (relatif au fichier app.py)
