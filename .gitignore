@@ -1,34 +1,70 @@
-# Environnements virtuels
-env_debug/
-venv/
-.venv/
-env/
-
-# Fichiers de logs (optionnel — tu peux les inclure pour le debug, mais pas obligatoire)
-app/logs/
-tests/logs/
-
-# Fichiers générés par Python
+# Fichiers Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
-.ipynb_checkpoints/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Fichiers de configuration locale / secrets
+# Environnements virtuels
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+env_debug/
+
+# Configuration sensible
+app/config.cfg
 .env
 *.env
-config.cfg  # si tu en crées un pour flask-monitoringdashboard
 
-# Fichiers de base de données SQLite (optionnel — si tu veux les exclure)
+# Fichiers de logs
+logs/
+*.log
+app.log
+
+# Base de données de monitoring
 *.db
-*.sqlite3
+monitoring_dashboard.db
 
-# Dossiers de build / packaging
-build/
-dist/
-*.egg-info/
+# Modèles ML (trop lourds pour Git)
+*.keras
+*.h5
+models/
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Images de test (optionnel selon votre choix)
+# images_to_test/
 
 # Fichiers système
 .DS_Store
@@ -44,4 +80,6 @@ Thumbs.db
 token.txt
 mongodb_atlas_config.txt
 Ajout_var_env_backend_torch_plus_lancement_app.txt
+useful_requests_sqlite.sql
+app/templates/result_v1.html
 
