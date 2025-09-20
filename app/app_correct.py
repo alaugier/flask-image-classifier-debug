@@ -117,54 +117,6 @@ if MONGO_URI:
 else:
     logger.warning("⚠️ MONGO_URI non définie — feedback non enregistré.")
 
-# Configuration explicite avant bind
-def get_or_generate_security_token():
-    """Récupère ou génère un token de sécurité"""
-    token = os.getenv('FLASK_MONITORING_TOKEN')
-    if not token:
-        import secrets
-        token = secrets.token_urlsafe(48)
-        logger.warning(f"⚠️ Token de sécurité généré automatiquement: {token}")
-        logger.warning("⚠️ Ajoutez FLASK_MONITORING_TOKEN={} à vos variables d'environnement pour la production!".format(token))
-    return token
-
-# Configuration du dashboard
-config_path = os.path.join(BASE_DIR, 'config.cfg')
-if os.path.exists(config_path):
-    # Charger d'abord la configuration depuis le fichier
-    dashboard.config.init_from(file=config_path)
-    logger.info("✅ Configuration dashboard chargée depuis config.cfg")
-    
-    # Puis override les paramètres sensibles depuis les variables d'environnement
-    dashboard.config.username = os.getenv('DASHBOARD_USERNAME', dashboard.config.username)
-    dashboard.config.password = os.getenv('DASHBOARD_PASSWORD', dashboard.config.password)
-else:
-    # Configuration par défaut si pas de fichier
-    dashboard.config.username = os.getenv('DASHBOARD_USERNAME', 'admin')
-    dashboard.config.password = os.getenv('DASHBOARD_PASSWORD', 'admin')
-    logger.info("⚠️ Configuration dashboard par défaut appliquée")
-
-# Le token de sécurité est toujours géré programmatiquement (priorité aux variables d'env)
-dashboard.config.security_token = get_or_generate_security_token()
-
-# ✅ CORRECTION: Configuration base de données SQLite pour le dashboard de monitoring
-# Flask-MonitoringDashboard utilise SQLAlchemy et ne supporte que les DB relationnelles
-dashboard_db_path = os.path.join(BASE_DIR, 'monitoring_dashboard.db')
-dashboard.config.database_name = f'sqlite:///{dashboard_db_path}'
-dashboard.config.table_prefix = 'fmd_'
-logger.info(f"✅ Configuration SQLite dashboard appliquée: {dashboard_db_path}")
-
-# Vérification de la configuration avant bind
-logger.info(f"Dashboard config - Username: {dashboard.config.username}")
-logger.info(f"Dashboard config - Database: {getattr(dashboard.config, 'database_name', 'Not set')}")
-logger.info(f"Dashboard config - Token configuré: {'Oui' if dashboard.config.security_token else 'Non'}")
-
-dashboard.bind(app)
-logger.info("✅ Flask-MonitoringDashboard initialisé")
-
-# Note: MongoDB reste utilisé pour votre application (feedback utilisateur)
-# SQLite est utilisé uniquement pour les métriques de monitoring
-
 # ---------------- Model ----------------
 # Chemin absolu vers le modèle (relatif au fichier app.py)
 MODEL_PATH = os.path.join(BASE_DIR, "models", "final_cnn.keras")
@@ -281,47 +233,52 @@ def preprocess_from_pil(pil_img: Image.Image) -> np.ndarray:
     logger.info(f"Forme finale du tensor: {img_array.shape}")
     return img_array
 
-def save_feedback_to_db(image_data, predicted_label, predicted_confidence, user_label, timestamp):
-    """Sauvegarde le feedback utilisateur dansMongoDB Atlas.
+def save_feedback_to_db(image_data, predicted_label, predicted_confidence, user_label, timestamp, file=None, processing_time_ms=None):
+    """Sauvegarde le feedback utilisateur dans MongoDB Atlas avec métadonnées complètes.
     
     Args:
-        image_data (str): Image encodée en base64 (ex: "image/jpeg;base64,/9j/4AAQ...")
-        predicted_label (str): Classe prédite par le modèle (ex: "forest")
-        predicted_confidence (float):Score de confiance du modèle (0.0 à 1.0)
-        user_label (str):Classe choisie par l'utilisateur (feedback)
-        timestamp (str):Timestamp ISO 8601 de la soumission (ex: "2025-09-16T13:45:22.123456")
-    
-    Returns:
-        None
-    
-    Logs:
-        - INFO si le feedback est sauvegardé avec succès.
-        -ERROR si une exception est levée.
-        -WARNING si la base de données n'est pas initialisée.
-    
-    Example:
-        >>> save_feedback_to_db("image/...", "meadow", 0.975, "forest", "2025-09-16T13:45:22")
-        # Enregistre un document dansMongoDB Atlas.
+        image_data (str): Image encodée en base64
+        predicted_label (str): Classe prédite par le modèle
+        predicted_confidence (float): Confiance du modèle
+        user_label (str): Classe choisie par l'utilisateur
+        timestamp (str): Timestamp ISO de la soumission
+        file (FileStorage, optional): Fichier uploadé (pour extraire métadonnées)
+        processing_time_ms (int, optional): Temps de traitement en ms
     """
     if 'feedback_collection' not in globals():
         logger.warning("Base de données non initialisée — feedback non enregistré.")
         return
 
     try:
+        # Extraire les métadonnées de l'image (si file est fourni)
+        image_metadata = {}
+        if file:
+            image_metadata = {
+                "image_filename": secure_filename(file.filename),
+                "image_size_bytes": len(file.read()),
+                "image_format": file.content_type.split('/')[-1].upper() if file.content_type else "UNKNOWN"
+            }
+            # Remettre le pointeur au début du fichier pour le preprocessing
+            file.seek(0)
+
         feedback_entry = {
             "timestamp": timestamp,
             "image_data": image_data,
             "predicted_label": predicted_label,
             "confidence": predicted_confidence,
             "user_label": user_label,
-            "is_correct": predicted_label == user_label
+            "is_correct": predicted_label == user_label,
+            "model_version": "v1.0",  # À incrémenter à chaque réentraînement
+            "processing_time_ms": processing_time_ms,
+            **image_metadata,  # Fusionne les métadonnées de l'image
+            "prediction_status": "corrected" if predicted_label != user_label else "validated"
         }
         
         result = feedback_collection.insert_one(feedback_entry)
-        logger.info(f"✅ Feedback sauvegardé dansMongo avec ID : {result.inserted_id}")
+        logger.info(f"✅ Feedback sauvegardé dans MongoDB avec ID : {result.inserted_id}")
         
     except Exception as e:
-        logger.error(f"❌ Erreur lors de la sauvegarde dansMongo : {e}", exc_info=True)
+        logger.error(f"❌ Erreur lors de la sauvegarde dans MongoDB : {e}", exc_info=True)
 
 def rate_limit(max_per_minute):
     min_interval = 60.0 / max_per_minute
@@ -351,28 +308,10 @@ def index():
     return render_template("upload.html")
 
 @app.route("/predict", methods=["POST"])
-@rate_limit(10)  # Max 10 requêtes par minute
+@rate_limit(10)
 def predict():
-    """Traite l'upload, exécute la prédiction et affiche le résultat.
-
-    Attendu: une requête `multipart/form-data` avec le champ `file`.
-    Étapes:
-      1) Validation de présence et d'extension du fichier.
-      2) Lecture du contenu en mémoire et ouverture en PIL.
-      3) Prétraitement -> tenseur (1, MODEL_HEIGHT, MODEL_WIDTH, 3).
-      4) Prédiction Keras -> probas, top-1 (label, confiance).
-      5) Encodage de l'image en Data URL et rendu du template résultat.
-
-    Redirects:
-        - Redirige vers "/" si le fichier est manquant ou invalide.
-
-    Returns:
-        Réponse HTML rendant "result.html" avec:
-        - `image_data_url` : image soumise encodée (base64),
-        - `predicted_label` : classe prédite (str),
-        - `confidence` : score softmax (float),
-        - `classes` : liste des classes (pour les boutons).
-    """
+    """Traite l'upload, exécute la prédiction et affiche le résultat."""
+    start_time = time.time()  # ← Début du timer
     try:
         logger.info("Début de la prédiction")
         
@@ -393,12 +332,12 @@ def predict():
         # Préprocessing avec redimensionnement
         img_array = preprocess_from_pil(pil_img)
 
-        # Prédiction avec wrapper pour capturer les erreurs spécifiques
+        # Prédiction
         try:
             probs = model.predict(img_array, verbose=0)[0]
         except Exception as pred_error:
             logger.error(f"❌ ERREUR DE PRÉDICTION: {type(pred_error).__name__}: {pred_error}", exc_info=True)
-            raise  # Re-lance l'erreur pour que le try/catch externe la gère
+            raise
 
         cls_idx = int(np.argmax(probs))
         label = CLASSES[cls_idx]
@@ -408,11 +347,15 @@ def predict():
 
         image_data_url = to_data_url(pil_img, fmt="JPEG")
 
+        # Calculer le temps de traitement
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
         return render_template("result.html", 
                              image_data_url=image_data_url, 
                              predicted_label=label, 
                              confidence=conf, 
-                             classes=CLASSES)
+                             classes=CLASSES,
+                             processing_time_ms=processing_time_ms)  # ← Passer au template
         
     except Exception as e:
         logger.error(f"Erreur lors de la prédiction: {e}", exc_info=True)
@@ -429,9 +372,17 @@ def submit_feedback():
         predicted_confidence = data.get('predicted_confidence')
         user_label = data.get('user_label')
         timestamp = datetime.now().isoformat()
-        
+        processing_time_ms = data.get('processing_time_ms')
+
         # Sauvegarde du feedback
-        save_feedback_to_db(image_data, predicted_label, predicted_confidence, user_label, timestamp)
+        save_feedback_to_db(
+            image_data=image_data,
+            predicted_label=predicted_label,
+            predicted_confidence=predicted_confidence,
+            user_label=user_label,
+            timestamp=timestamp,
+            processing_time_ms=processing_time_ms
+        )
         
         logger.info(f"Feedback reçu: prédiction={predicted_label}, utilisateur={user_label}")
         
@@ -460,6 +411,78 @@ def not_found_error(error):
 def internal_error(error):
     logger.error(f"500 - Erreur interne: {error}")
     return jsonify({"error": "Erreur interne du serveur"}), 500
+
+# Routes de test pour le monitoring
+@app.route("/test", methods=["GET"])
+def test_endpoint():
+    """Endpoint de test rapide."""
+    logger.info("Endpoint de test appelé")
+    time.sleep(0.1)
+    return jsonify({
+        "status": "ok", 
+        "message": "Test endpoint fonctionne",
+        "timestamp": datetime.now().isoformat()
+    })
+
+@app.route("/test-slow", methods=["GET"])  
+def test_slow_endpoint():
+    """Endpoint de test lent pour déclencher les alertes de performance."""
+    logger.info("Endpoint lent appelé")
+    time.sleep(2)
+    return jsonify({
+        "status": "ok", 
+        "message": "Test endpoint lent fonctionne",
+        "processing_time": "2000ms",
+        "timestamp": datetime.now().isoformat()
+    })
+
+# Configuration explicite avant bind
+def get_or_generate_security_token():
+    """Récupère ou génère un token de sécurité"""
+    token = os.getenv('FLASK_MONITORING_TOKEN')
+    if not token:
+        import secrets
+        token = secrets.token_urlsafe(48)
+        logger.warning(f"⚠️ Token de sécurité généré automatiquement: {token}")
+        logger.warning("⚠️ Ajoutez FLASK_MONITORING_TOKEN={} à vos variables d'environnement pour la production!".format(token))
+    return token
+
+# Configuration du dashboard
+config_path = os.path.join(BASE_DIR, 'config.cfg')
+if os.path.exists(config_path):
+    # Charger d'abord la configuration depuis le fichier
+    dashboard.config.init_from(file=config_path)
+    logger.info("✅ Configuration dashboard chargée depuis config.cfg")
+    
+    # Puis override les paramètres sensibles depuis les variables d'environnement
+    dashboard.config.username = os.getenv('DASHBOARD_USERNAME', dashboard.config.username)
+    dashboard.config.password = os.getenv('DASHBOARD_PASSWORD', dashboard.config.password)
+else:
+    # Configuration par défaut si pas de fichier
+    dashboard.config.username = os.getenv('DASHBOARD_USERNAME', 'admin')
+    dashboard.config.password = os.getenv('DASHBOARD_PASSWORD', 'admin')
+    logger.info("⚠️ Configuration dashboard par défaut appliquée")
+
+# Le token de sécurité est toujours géré programmatiquement (priorité aux variables d'env)
+dashboard.config.security_token = get_or_generate_security_token()
+
+# ✅ CORRECTION: Configuration base de données SQLite pour le dashboard de monitoring
+# Flask-MonitoringDashboard utilise SQLAlchemy et ne supporte que les DB relationnelles
+dashboard_db_path = os.path.join(BASE_DIR, 'monitoring_dashboard.db')
+dashboard.config.database_name = f'sqlite:///{dashboard_db_path}'
+dashboard.config.table_prefix = 'fmd_'
+logger.info(f"✅ Configuration SQLite dashboard appliquée: {dashboard_db_path}")
+
+# Vérification de la configuration avant bind
+logger.info(f"Dashboard config - Username: {dashboard.config.username}")
+logger.info(f"Dashboard config - Database: {getattr(dashboard.config, 'database_name', 'Not set')}")
+logger.info(f"Dashboard config - Token configuré: {'Oui' if dashboard.config.security_token else 'Non'}")
+
+dashboard.bind(app)
+logger.info("✅ Flask-MonitoringDashboard initialisé")
+
+# Note: MongoDB reste utilisé pour votre application (feedback utilisateur)
+# SQLite est utilisé uniquement pour les métriques de monitoring
 
 if __name__ == "__main__":
     # Créer le dossier de logs s'il n'existe pas (chemin absolu)
