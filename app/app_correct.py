@@ -308,7 +308,6 @@ def index():
     return render_template("upload.html")
 
 @app.route("/predict", methods=["POST"])
-@rate_limit(10)
 def predict():
     """Traite l'upload, exécute la prédiction et affiche le résultat."""
     start_time = time.time()  # ← Début du timer
@@ -360,6 +359,10 @@ def predict():
     except Exception as e:
         logger.error(f"Erreur lors de la prédiction: {e}", exc_info=True)
         return jsonify({"error": "Erreur lors du traitement de l'image"}), 500
+
+# Appliquer le rate limit uniquement en production (Render)
+if os.getenv('FLASK_ENV') == 'production':
+    predict = rate_limit(10)(predict)
 
 @app.route("/feedback", methods=["POST"])
 def submit_feedback():

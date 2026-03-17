@@ -83,3 +83,14 @@ Ajout_var_env_backend_torch_plus_lancement_app.txt
 useful_requests_sqlite.sql
 app/templates/result_v1.html
 
+
+# LaTeX build artifacts
+livrable/*.aux
+livrable/*.bbl
+livrable/*.bcf
+livrable/*.blg
+livrable/*.out
+livrable/*.run.xml
+livrable/*.toc
+livrable/*.log
+livrable/_minted-*/
