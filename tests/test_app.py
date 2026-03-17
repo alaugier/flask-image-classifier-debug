@@ -69,8 +69,10 @@ class TestImageClassificationApp(unittest.TestCase):
                         f"L'image doit être redimensionnée à {expected_shape}, obtenu: {processed.shape}")
         
         # Vérifier que les valeurs sont normalisées entre 0 et 1
-        self.assertTrue(np.all(processed >= 0) and np.all(processed <= 1),
-                       "Les valeurs doivent être normalisées entre 0 et 1")
+        self.assertTrue(np.all(processed >= 0) and np.all(processed <= 255),
+                    "Les valeurs doivent être dans [0, 255] — normalisation déléguée à la couche Rescaling")
+        self.assertGreater(processed.max(), 1.0,
+                    "Max > 1 attendu : pas de division par 255 dans le preprocessing")
         
         # Vérifier le type de données
         self.assertEqual(processed.dtype, np.float32, 
