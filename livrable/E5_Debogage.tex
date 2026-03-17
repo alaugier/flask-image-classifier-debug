@@ -1,0 +1,646 @@
+\documentclass[french, a4paper, 12pt]{article}
+
+% ============================================================
+% PRÉAMBULE
+% ============================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{csquotes}
+
+\usepackage[a4paper, left=2cm, right=2cm, top=3cm, bottom=3cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{helvet}
+\renewcommand{\rmdefault}{phv}
+\usepackage{microtype}
+
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{mdframed}
+
+\usepackage[colorlinks=true, allcolors=teal]{hyperref}
+
+% Code — nécessite : pdflatex -shell-escape E5_Debogage.tex
+\usepackage{minted}
+\setminted{
+    fontsize=\small,
+    breaklines=true,
+    frame=lines,
+    framesep=4pt,
+    linenos=true
+}
+
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, calc}
+
+\usepackage[style=numeric, sorting=nyt, backend=biber]{biblatex}
+\addbibresource{references_E5.bib}
+
+\usepackage{mdframed}
+
+\definecolor{RNCPred}{HTML}{CC0033}
+\definecolor{pageBeige}{HTML}{f4efe3}
+\definecolor{textDark}{HTML}{4d4a47}
+
+% ============================================================
+% DÉBUT DU DOCUMENT
+% ============================================================
+\begin{document}
+
+% ============================================================
+% PAGE DE GARDE
+% ============================================================
+\pagecolor{pageBeige}
+\color{textDark}
+\thispagestyle{empty}
+
+\begin{center}
+    \begin{mdframed}[
+        linewidth=1.2pt, linecolor=black, backgroundcolor=white,
+        innertopmargin=10pt, innerbottommargin=10pt,
+        innerleftmargin=14pt, innerrightmargin=14pt,
+        skipabove=0pt, skipbelow=0pt
+    ]
+        \centering
+        {\small\bfseries Titre professionnel RNCP 37827}\\[4pt]
+        {\LARGE\bfseries\color{RNCPred} Développeur en intelligence artificielle}\\[6pt]
+        {\small Niveau~6, équivalent à Bac~+3/4}\\[8pt]
+        \IfFileExists{images/logo_france_competences.png}{%
+            \includegraphics[height=1.0cm]{images/logo_france_competences.png}
+        }{%
+            \textcolor{gray}{\footnotesize [logo France compétences]}
+        }
+    \end{mdframed}
+
+    \vspace{1.8cm}
+    {\large\bfseries livrable E5}\\[0.4cm]
+    {\normalsize Surveillance et résolution d'incidents}
+
+    \vspace{3.5cm}
+    {\LARGE\itshape Déboguer une application de classification\\[0.3cm]
+    d'images satellite}
+
+    \vspace{4.5cm}
+    {\normalsize Passage par la voie de la formation ---
+    parcours de 19 mois achevé en mars 2026}\\[0.6cm]
+    {\normalsize Alexandre Laugier}\\[0.4cm]
+    {\small mars 2026}\\[0.4cm]
+    \vfill
+    {\normalsize INSÉRER ICI LA DATE DE REMISE}
+\end{center}
+
+\newpage
+\pagecolor{white}
+\color{black}
+
+% ============================================================
+% TABLE DES MATIÈRES
+% ============================================================
+\tableofcontents
+\newpage
+
+% ============================================================
+% SECTION 1 — CONTEXTE
+% ============================================================
+\section{Contexte et description de l'application}
+
+\subsection{Objectif}
+
+L'application est une interface web de \textbf{classification d'images satellite}
+développée avec Flask. Elle permet à un utilisateur de soumettre une image et
+d'obtenir une prédiction parmi quatre classes : \texttt{desert}, \texttt{forest},
+\texttt{meadow} et \texttt{mountain}. L'inférence repose sur un modèle CNN
+pré-entraîné au format Keras. Un mécanisme de feedback utilisateur alimente une
+base MongoDB Atlas pour permettre un futur ré-entraînement du modèle.
+
+\subsection{Stack technique}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabularx}{\textwidth}{%
+        >{\bfseries\raggedright}p{2.8cm}
+        >{\raggedright}p{3.5cm}
+        >{\raggedright\arraybackslash}X}
+        \toprule
+        Composant & Technologie & Rôle \\
+        \midrule
+        Backend     & Flask 2.3.3~\cite{Flask}              & Routing, templates Jinja2, API REST \\
+        ML/IA       & Keras 2.13.1~\cite{Keras} + TensorFlow & Inférence CNN pré-entraîné \\
+        Persistance & MongoDB Atlas~\cite{MongoDB}            & Feedbacks utilisateurs (NoSQL) \\
+        Monitoring  & SQLite + Flask-MonitoringDashboard~\cite{FlaskMonitoring} & Métriques de performance \\
+        Tests       & \texttt{unittest} (stdlib)~\cite{PythonUnittest} & 12 tests automatisés, pipeline CI \\
+        Déploiement & Gunicorn~\cite{Gunicorn} + Render (PaaS)  & Serveur de production \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Stack technique de l'application de classification d'images satellite.}
+    \label{tab:stack}
+\end{table}
+
+% ============================================================
+% SECTION 2 — BUGS ET CORRECTIONS
+% ============================================================
+\section{Identification et correction des bugs}
+
+Deux bugs indépendants ont été identifiés dans la fonction
+\texttt{preprocess\_from\_pil()} de \texttt{app/app.py}. Le premier provoque
+une erreur bloquante visible dans les logs ; le second est silencieux mais
+tout aussi critique : il dégrade les prédictions sans lever d'exception.
+
+% ----------------------------------------------------------
+\subsection{Bug 1 --- Redimensionnement absent}
+
+\subsubsection*{Symptôme}
+
+Au lancement d'une prédiction sur une image uploadée, le serveur lève
+l'exception suivante :
+
+\begin{mdframed}[linecolor=red!60, linewidth=1pt, backgroundcolor=red!4,
+                 innertopmargin=6pt, innerbottommargin=6pt]
+\small\ttfamily
+ValueError: Input 0 of layer "functional\_1" is incompatible with the layer:\\
+expected shape=(None, 224, 224, 3), found shape=(1, 600, 600, 3)
+\end{mdframed}
+
+\medskip
+Le modèle Keras attend un tenseur d'entrée de forme \texttt{(None, 224, 224, 3)},
+mais reçoit un tenseur \texttt{(1, 600, 600, 3)} correspondant à l'image originale
+non redimensionnée.
+
+\subsubsection*{Cause racine}
+
+La fonction \texttt{preprocess\_from\_pil()} convertit l'image en RGB et la
+normalise, mais \textbf{omet l'étape de redimensionnement}. L'image est donc
+transmise au modèle à sa taille d'origine. Le code fautif est reproduit en
+Annexe~A.
+
+\subsubsection*{Correctif appliqué}
+
+La correction s'effectue en deux étapes :
+
+\begin{enumerate}[leftmargin=1.5cm]
+    \item \textbf{Extraction dynamique des dimensions} attendues par le modèle
+          lors du chargement, pour éviter toute valeur codée en dur :
+          \begin{quote}\small\ttfamily
+          model = keras.saving.load\_model(MODEL\_PATH, compile=False)\\
+          MODEL\_HEIGHT, MODEL\_WIDTH = input\_shape[1], input\_shape[2]
+          \end{quote}
+
+    \item \textbf{Ajout du redimensionnement} via \texttt{Image.Resampling.LANCZOS}%
+          ~\cite{Pillow} (filtre haute qualité, conforme aux recommandations
+          Pillow $\geq$ 9.1).
+\end{enumerate}
+
+% ----------------------------------------------------------
+\subsection{Bug 2 --- Double normalisation}
+
+\subsubsection*{Symptôme}
+
+Après correction du redimensionnement, l'application ne lève plus d'erreur mais
+les \textbf{prédictions sont identiques pour toutes les images} : le modèle
+retourne systématiquement la même classe quelle que soit l'entrée.
+
+\subsubsection*{Cause racine}
+
+L'inspection de l'architecture du modèle~\cite{Keras} via
+\texttt{model.summary()} révèle la présence d'une couche \texttt{Rescaling}
+intégrée :
+
+\begin{mdframed}[linecolor=blue!40, linewidth=1pt, backgroundcolor=blue!3,
+                 innertopmargin=6pt, innerbottommargin=6pt]
+\small\ttfamily
+rescaling (Rescaling) \quad $|$ \quad scale: 1/255 \quad $|$ \quad offset: 0.0
+\end{mdframed}
+
+\medskip
+La fonction \texttt{preprocess\_from\_pil()} effectuait déjà une normalisation
+\texttt{/ 255.0} avant d'envoyer le tenseur au modèle. Le modèle appliquait
+ensuite une seconde division par 255. Les pixels étaient donc divisés par
+$255^2 = 65\,025$, produisant des valeurs de l'ordre de $10^{-5}$.
+
+Cette double normalisation entraîne une cascade d'effets :
+
+\begin{enumerate}[leftmargin=1.5cm]
+    \item \textbf{Activations plates} dans les couches convolutionnelles : les
+          filtres reçoivent un signal quasi nul et ne peuvent extraire aucun motif.
+    \item \textbf{Perte totale d'information visuelle} : toutes les images
+          produisent le même vecteur d'activation, quelle que soit leur apparence.
+    \item \textbf{Vecteur constant} après le \texttt{GlobalAveragePooling2D}
+          : la couche dense finale reçoit un vecteur uniforme.
+    \item \textbf{Prédictions dégénérées} : le modèle retourne la même classe
+          pour toutes les images (effondrement sur la classe majoritaire).
+\end{enumerate}
+
+Ce bug est \textbf{silencieux} : aucune exception n'est levée, les logs
+n'indiquent aucune anomalie, et le modèle semble fonctionner normalement.
+Il n'est détectable que par l'analyse qualitative des prédictions ou par
+l'inspection de l'architecture du modèle.
+
+\subsubsection*{Méthode de détection}
+
+La couche \texttt{Rescaling} a été identifiée en inspectant la configuration
+de la troisième couche du modèle en session Python interactive :
+
+\begin{minted}[linenos=false]{python}
+model = keras.saving.load_model("models/final_cnn.keras", compile=False)
+print(model.layers[2].get_config())
+# {'name': 'rescaling', 'scale': 0.00392156862745098, 'offset': 0.0}
+# scale = 1/255 => normalisation deja integree dans le modele
+\end{minted}
+
+La valeur \texttt{scale: 0.00392...} correspond exactement à $1/255$, confirmant
+que la normalisation est déjà prise en charge par le modèle lors de l'inférence.
+
+\subsubsection*{Correctif appliqué}
+
+La division \texttt{/ 255.0} a été supprimée de \texttt{preprocess\_from\_pil()}.
+Le tenseur est transmis au modèle avec des valeurs entières dans $[0, 255]$,
+conformément à ce qui était attendu lors de l'entraînement.
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabularx}{\textwidth}{>{\bfseries}p{3.5cm} X X}
+        \toprule
+        Étape & Avant correction & Après correction \\
+        \midrule
+        Prétraitement & \texttt{array / 255.0} $\rightarrow [0,1]$ &
+            \texttt{array} brut $\rightarrow [0, 255]$ \\
+        Couche Rescaling & $[0,1] \div 255 \rightarrow [0, 3.9\times10^{-3}]$ &
+            $[0,255] \div 255 \rightarrow [0, 1]$ \\
+        Signal reçu par Conv2D & $\approx 10^{-5}$ (quasi nul) &
+            $\in [0, 1]$ (cohérent avec l'entraînement) \\
+        Prédictions & Identiques pour toutes les images &
+            Différenciées selon le contenu \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Impact de la double normalisation avant et après correctif.}
+    \label{tab:double_norm}
+\end{table}
+
+La version finale corrigée de la fonction, intégrant les deux correctifs
+(redimensionnement + suppression de la normalisation manuelle), est
+disponible en Annexe~A.
+
+\subsection{Flux de traitement corrigé}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        box/.style={rectangle, draw=black!50, line width=0.7pt,
+                    rounded corners=4pt, minimum width=2.6cm,
+                    minimum height=0.9cm, align=center, font=\small\sffamily},
+        mon/.style={rectangle, draw=orange!70!black, line width=0.7pt,
+                    rounded corners=4pt, minimum width=2.6cm,
+                    minimum height=0.9cm, align=center, font=\small\sffamily,
+                    fill=orange!8},
+        arrow/.style={-Stealth, line width=0.9pt, black!60},
+        oarrow/.style={-Stealth, line width=0.9pt, orange!70!black, dashed}
+    ]
+        % Flux principal (ligne haute)
+        \node[box, fill=blue!8]    (user)    at (0,   0) {Utilisateur};
+        \node[box, fill=blue!8]    (upload)  at (3.2, 0) {Upload\\image};
+        \node[box, fill=green!8]   (preproc) at (6.4, 0) {Prétraitement\\224$\times$224};
+        \node[box, fill=green!8]   (predict) at (9.6, 0) {Inférence\\CNN};
+        \node[box, fill=cyan!8]    (result)  at (12.8,0) {Résultat\\+ Feedback};
+
+        \draw[arrow] (user)    -- (upload);
+        \draw[arrow] (upload)  -- (preproc);
+        \draw[arrow] (preproc) -- (predict);
+        \draw[arrow] (predict) -- (result);
+
+        % Flux monitoring (ligne basse)
+        \node[mon] (m1) at (3.2, -1.8) {Interception\\requête};
+        \node[mon] (m2) at (6.4, -1.8) {Mesure\\latence};
+        \node[mon] (m3) at (9.6, -1.8) {Stockage\\SQLite};
+        \node[mon] (m4) at (12.8,-1.8) {Dashboard\\web};
+
+        \draw[oarrow] (upload) -- (m1);
+        \draw[arrow, orange!70!black] (m1) -- (m2);
+        \draw[arrow, orange!70!black] (m2) -- (m3);
+        \draw[arrow, orange!70!black] (m3) -- (m4);
+
+        % Légendes
+        \node[font=\scriptsize\sffamily\bfseries, above=4pt of upload]
+            {Flux de prédiction};
+        \node[font=\scriptsize\sffamily\bfseries, text=orange!70!black,
+              below=4pt of m1] {Flux de monitoring};
+    \end{tikzpicture}
+    \caption{Flux de traitement corrigé : prédiction (haut) et monitoring en
+             parallèle (bas, orange pointillé).}
+    \label{fig:flux}
+\end{figure}
+
+% ============================================================
+% SECTION 3 — TESTS
+% ============================================================
+\section{Validation par tests automatisés}
+
+\subsection{Stratégie de test}
+
+La suite de tests est organisée en deux classes \texttt{unittest} :
+\texttt{TestImageClassificationApp} couvre le flux de traitement des images
+(validation des extensions, prétraitement, encodage, routes Flask, feedback) ;
+\texttt{TestModelIntegration} vérifie la compatibilité entre le prétraitement
+et l'interface du modèle. Les tests utilisent des mocks pour simuler le modèle
+Keras sans dépendre du fichier \texttt{.h5}.
+
+Le test critique (\texttt{test\_preprocess\_from\_pil\_shape\_correction})
+soumet une image synthétique 600$\times$600 et vérifie que la sortie a bien
+la forme \texttt{(1, 224, 224, 3)} attendue par le modèle. Son code est
+reproduit en Annexe~B.
+
+\subsection{Résultats}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabularx}{\textwidth}{%
+        >{\raggedright}X
+        >{\centering\arraybackslash}p{3.5cm}}
+        \toprule
+        \textbf{Catégorie de test} & \textbf{Résultat} \\
+        \midrule
+        Validation des extensions de fichier  & \textcolor{green!50!black}{5/5 réussis} \\
+        Redimensionnement et prétraitement     & \textcolor{green!50!black}{3/3 réussis} \\
+        Fonctionnement des routes Flask        & \textcolor{green!50!black}{3/3 réussis} \\
+        Feedback utilisateur                   & \textcolor{green!50!black}{1/1 réussi}  \\
+        Intégration modèle (mock)              & \textcolor{green!50!black}{1/1 réussi}  \\
+        \midrule
+        \textbf{Total} (durée : 18,4\,s)       & \textbf{12/12 réussis} \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Résultats de la suite de 12 tests automatisés.}
+    \label{tab:tests}
+\end{table}
+
+L'exécution sans erreur de l'ensemble de la suite confirme la correction du
+bug de redimensionnement, la robustesse du prétraitement pour toutes les tailles
+d'entrée testées (100$\times$100 à 1024$\times$768), et la stabilité des routes
+Flask.
+
+% ============================================================
+% SECTION 4 — OBSERVABILITÉ
+% ============================================================
+\section{Observabilité : journalisation, alerting et monitoring}
+
+\subsection{Journalisation}
+
+La journalisation est assurée par la bibliothèque standard \texttt{logging}~\cite{PythonLogging},
+configurée avec deux \textit{handlers} : un fichier \texttt{app.log} et la
+sortie console. Trois niveaux sont utilisés selon la gravité :
+\texttt{logger.info()} pour l'état des services (ex.\ connexion MongoDB établie),
+\texttt{logger.warning()} pour les situations dégradées sans arrêt du service
+(ex.\ variable d'environnement absente), et \texttt{logger.error()} pour les
+exceptions avec traceback (ex.\ erreur de connexion à Atlas).
+
+\subsection{Alerting}
+
+En production, un système d'alerte email est activé via \texttt{SMTPHandler}
+(bibliothèque \texttt{logging.handlers}). Tout log de niveau \texttt{ERROR} ou
+supérieur déclenche automatiquement l'envoi d'un email avec sujet
+\og\texttt{ERREUR CRITIQUE --- App Classification}\fg{} vers l'adresse définie
+dans la variable d'environnement \texttt{ALERT\_EMAIL\_RECIPIENT}. Les
+credentials SMTP sont chargés depuis les variables d'environnement, jamais
+codés en dur.
+
+\subsection{Monitoring}
+
+\texttt{Flask-MonitoringDashboard} est monté sur le endpoint \texttt{/dashboard}.
+Il intercepte automatiquement chaque requête HTTP et enregistre dans une base
+SQLite locale : le temps de réponse par endpoint, le code HTTP retourné,
+l'utilisation horaire et la comparaison multi-version. Des scripts Python
+dédiés (\texttt{monitoring/}) permettent d'extraire ces métriques pour une
+analyse hors ligne (détection de régressions, pics de latence).
+
+% ============================================================
+% SECTION 5 — FEEDBACK LOOP
+% ============================================================
+\section{Feedback loop et perspectives de ré-entraînement}
+
+\subsection{Collecte des feedbacks}
+
+Après chaque prédiction, l'utilisateur peut corriger le label via un appel
+AJAX (\texttt{POST /feedback}). Le backend valide les champs reçus et insère
+dans MongoDB Atlas un document structuré contenant l'image encodée en base64,
+le label prédit avec sa confiance, le label corrigé par l'utilisateur,
+un booléen \texttt{is\_correct} et la version du modèle ayant effectué
+la prédiction.
+
+\subsection{Stratégie de ré-entraînement sans fuite de données}
+
+Un script \texttt{cron} quotidien vérifie le nombre de feedbacks corrigés.
+Dès qu'un seuil (ex.\ 100 observations) est atteint, un pipeline de
+ré-entraînement est déclenché. La stratégie retenue \textbf{gèle le jeu de
+test initial} : seul l'ensemble d'entraînement est étendu avec les nouvelles
+données MongoDB, garantissant la comparabilité des métriques entre versions
+du modèle et éliminant tout risque de fuite de données
+(\textit{data leakage}).
+
+\newpage
+
+% ============================================================
+% BIBLIOGRAPHIE
+% ============================================================
+\section*{Références}
+\addcontentsline{toc}{section}{Références}
+\printbibliography[heading=none]
+
+\newpage
+
+% ============================================================
+% ANNEXES
+% ============================================================
+\appendix
+
+\section*{Annexes}
+\addcontentsline{toc}{section}{Annexes}
+
+\subsection*{A --- Fonction \texttt{preprocess\_from\_pil()} : avant et après correctifs}
+
+\textbf{Version originale (deux bugs) :}
+
+\begin{minted}[linenos=false]{python}
+def preprocess_from_pil(pil_img: Image.Image) -> np.ndarray:
+    img = pil_img.convert("RGB")
+    # BUG 1 : pas de resize -> ValueError shape incompatible
+    # BUG 2 : normalisation / 255.0 alors que le modele contient
+    #         deja une couche Rescaling(1/255) -> double normalisation
+    img_array = np.asarray(img, dtype=np.float32) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+\end{minted}
+
+\textbf{Version finale corrigée (deux correctifs intégrés) :}
+
+\begin{minted}[linenos=false]{python}
+# Chargement du modele et extraction dynamique des dimensions
+model = keras.saving.load_model(MODEL_PATH, compile=False)
+input_shape = model.input_shape       # ex. (None, 224, 224, 3)
+MODEL_HEIGHT, MODEL_WIDTH = input_shape[1], input_shape[2]
+# Note : model.layers[2] est une couche Rescaling(scale=1/255)
+# => la normalisation est deja integree dans le modele
+
+
+def preprocess_from_pil(pil_img: Image.Image) -> np.ndarray:
+    """Prepare une image PIL pour l'inference Keras.
+
+    Args:
+        pil_img: Image PIL source, taille quelconque.
+
+    Returns:
+        np.ndarray de forme (1, MODEL_HEIGHT, MODEL_WIDTH, 3),
+        dtype float32, valeurs dans [0, 255] -- la normalisation
+        est delegue a la couche Rescaling du modele.
+    """
+    # 1. Conversion RGB
+    img = pil_img.convert("RGB")
+    # 2. CORRECTIF 1 : redimensionnement aux dimensions du modele
+    img = img.resize((MODEL_WIDTH, MODEL_HEIGHT),
+                     Image.Resampling.LANCZOS)
+    # 3. Conversion en array float32
+    #    CORRECTIF 2 : suppression du / 255.0
+    #    (la couche Rescaling du modele s'en charge)
+    img_array = np.asarray(img, dtype=np.float32)
+    # 4. Ajout de l'axe batch
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array   # shape : (1, 224, 224, 3), valeurs in [0, 255]
+\end{minted}
+
+\subsection*{B --- Tests unitaires : vérification du redimensionnement}
+
+\begin{minted}{python}
+class TestImageClassificationApp(unittest.TestCase):
+
+    def test_preprocess_from_pil_shape_correction(self):
+        """Test critique : le preprocessing doit redimensionner
+        toute image a la forme attendue par le modele."""
+        test_img = Image.new('RGB', (600, 600), color='blue')
+        processed = preprocess_from_pil(test_img)
+
+        expected_shape = (1, 224, 224, 3)
+        self.assertEqual(
+            processed.shape, expected_shape,
+            f"Forme attendue {expected_shape}, obtenue {processed.shape}"
+        )
+        self.assertEqual(
+            processed.dtype, np.float32,
+            "Le type de donnees doit etre float32"
+        )
+
+    def test_preprocess_different_input_sizes(self):
+        """Le preprocessing doit fonctionner pour toute taille d'entree."""
+        test_sizes = [(100, 100), (300, 200), (800, 600), (1024, 768)]
+        for width, height in test_sizes:
+            with self.subTest(size=(width, height)):
+                img = Image.new('RGB', (width, height), color='green')
+                processed = preprocess_from_pil(img)
+                self.assertEqual(
+                    processed.shape, (1, 224, 224, 3),
+                    f"Taille {width}x{height} mal redimensionnee"
+                )
+\end{minted}
+
+\subsection*{C --- Test unitaire : détection de la double normalisation}
+
+\begin{minted}{python}
+class TestPreprocessNormalization(unittest.TestCase):
+    """Verifie que le preprocessing ne normalise pas les pixels,
+    la couche Rescaling du modele s'en chargeant."""
+
+    def test_no_manual_normalization(self):
+        """Les valeurs de sortie doivent rester dans [0, 255], pas [0, 1]."""
+        # Image synthetique avec des pixels blancs (valeur max = 255)
+        test_img = Image.new('RGB', (224, 224), color=(255, 255, 255))
+        processed = preprocess_from_pil(test_img)
+
+        # Si / 255.0 est present -> max ~= 1.0
+        # Si absent (correct)   -> max ~= 255.0
+        self.assertGreater(
+            processed.max(), 1.0,
+            "Les pixels ne doivent PAS etre normalises dans le preprocessing "
+            "(la couche Rescaling du modele s'en charge)."
+        )
+        self.assertAlmostEqual(
+            float(processed.max()), 255.0, delta=1.0,
+            msg="Les pixels blancs doivent valoir ~255 apres preprocessing."
+        )
+
+    def test_rescaling_layer_present_in_model(self):
+        """Verifie que le modele contient bien une couche Rescaling(1/255)."""
+        rescaling_layers = [
+            l for l in model.layers
+            if l.__class__.__name__ == 'Rescaling'
+        ]
+        self.assertGreater(
+            len(rescaling_layers), 0,
+            "Le modele doit contenir au moins une couche Rescaling."
+        )
+        scale = rescaling_layers[0].get_config().get('scale', None)
+        self.assertIsNotNone(scale)
+        self.assertAlmostEqual(
+            scale, 1 / 255.0, places=6,
+            msg="La couche Rescaling doit avoir scale=1/255."
+        )
+
+    def test_no_double_normalization_effect(self):
+        """Verifie que deux images differentes produisent des predictions differentes
+        (symptome de la double normalisation : predictions identiques)."""
+        img_desert  = Image.open("images_to_test/desert_96.jpg")
+        img_forest  = Image.open("images_to_test/forest_42.jpg")
+        pred_desert = model.predict(preprocess_from_pil(img_desert),  verbose=0)
+        pred_forest = model.predict(preprocess_from_pil(img_forest),  verbose=0)
+        # Les vecteurs de probabilites ne doivent pas etre identiques
+        self.assertFalse(
+            np.allclose(pred_desert, pred_forest, atol=1e-3),
+            "Les predictions pour des images differentes doivent differer "
+            "(predictions identiques = symptome de double normalisation)."
+        )
+\end{minted}
+
+\begin{minted}{python}
+class TestImageClassificationApp(unittest.TestCase):
+
+    def test_preprocess_from_pil_shape_correction(self):
+        """Test critique : le preprocessing doit redimensionner
+        toute image a la forme attendue par le modele."""
+        # Image synthetique 600x600 (taille qui declenchait le bug)
+        test_img = Image.new('RGB', (600, 600), color='blue')
+        processed = preprocess_from_pil(test_img)
+
+        expected_shape = (1, 224, 224, 3)
+        self.assertEqual(
+            processed.shape,
+            expected_shape,
+            f"Forme attendue {expected_shape}, obtenue {processed.shape}"
+        )
+        self.assertEqual(
+            processed.dtype,
+            np.float32,
+            "Le type de donnees doit etre float32"
+        )
+        # Verification de la normalisation [0, 1]
+        self.assertGreaterEqual(processed.min(), 0.0)
+        self.assertLessEqual(processed.max(), 1.0)
+
+    def test_preprocess_different_input_sizes(self):
+        """Le preprocessing doit fonctionner pour toute taille d'entree."""
+        test_sizes = [(100, 100), (300, 200), (800, 600), (1024, 768)]
+        for width, height in test_sizes:
+            with self.subTest(size=(width, height)):
+                img = Image.new('RGB', (width, height), color='green')
+                processed = preprocess_from_pil(img)
+                self.assertEqual(
+                    processed.shape, (1, 224, 224, 3),
+                    f"Taille {width}x{height} mal redimensionnee"
+                )
+\end{minted}
+
+\end{document}

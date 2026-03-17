@@ -1,0 +1,100 @@
+% ============================================================
+%  TEMPLATE PAGE DE GARDE — RNCP 37827
+%  Développeur en Intelligence Artificielle
+%
+%  Utilisation dans votre document principal :
+%    \input{pagegarde}
+%    \pageDeGarde
+%      {E5}                          % Numéro du livrable
+%      {Surveillance et résolution d'incidents}  % Sous-titre bloc
+%      {Débugger une application de\\[0.3cm]classification d'images satellite}
+%      {Pierre Defourneaux}          % Auteur
+%      {mars 2026}                   % Date
+%      {INSÉRER ICI LA DATE DE REMISE}  % Date de remise
+%
+%  Packages requis (à charger dans le préambule principal) :
+%    xcolor, graphicx, geometry, helvet, tikz, mdframed (ou fancybox)
+% ============================================================
+
+\usepackage{mdframed}   % Pour l'encadré d'en-tête
+
+% --- Couleur institutionnelle ---
+\definecolor{RNCPred}{HTML}{CC0033}
+\definecolor{pageBeige}{HTML}{f4efe3}
+\definecolor{textDark}{HTML}{4d4a47}
+
+% ============================================================
+%  Commande principale
+%  #1 : code livrable   (ex. E2, E3, E4, E5)
+%  #2 : sous-titre bloc (ex. "Veille technique")
+%  #3 : titre principal (ex. "Les Réseaux de Neurones Profonds...")
+%  #4 : auteur
+%  #5 : mois/année      (ex. "mars 2026")
+%  #6 : date de remise  (ex. "INSÉRER ICI LA DATE DE REMISE")
+% ============================================================
+\newcommand{\pageDeGarde}[6]{%
+  \pagecolor{pageBeige}
+  \color{textDark}
+  \thispagestyle{empty}
+
+  \begin{center}
+
+    % --------------------------------------------------------
+    % ENCADRÉ EN-TÊTE RNCP
+    % --------------------------------------------------------
+    \begin{mdframed}[
+        linewidth=1.2pt,
+        linecolor=black,
+        backgroundcolor=white,
+        innertopmargin=10pt,
+        innerbottommargin=10pt,
+        innerleftmargin=14pt,
+        innerrightmargin=14pt,
+        skipabove=0pt,
+        skipbelow=0pt
+    ]
+      \centering
+      {\small\bfseries Titre professionnel RNCP 37827}\\[4pt]
+      {\LARGE\bfseries\color{RNCPred} Développeur en intelligence artificielle}\\[6pt]
+      {\small Niveau~6, équivalent à Bac~+3/4}\\[8pt]
+      % Logo France Compétences — remplacer par le chemin réel si disponible
+      \IfFileExists{images/logo_france_competences.png}{%
+        \includegraphics[height=1.0cm]{images/logo_france_competences.png}
+      }{%
+        \textcolor{gray}{\footnotesize [logo France compétences]}
+      }
+    \end{mdframed}
+
+    \vspace{1.8cm}
+
+    % --------------------------------------------------------
+    % BLOC LIVRABLE
+    % --------------------------------------------------------
+    {\large\bfseries livrable #1}\\[0.4cm]
+    {\normalsize #2}
+
+    \vspace{3.5cm}
+
+    % --------------------------------------------------------
+    % TITRE PRINCIPAL
+    % --------------------------------------------------------
+    {\LARGE\itshape #3}
+
+    \vspace{4.5cm}
+
+    % --------------------------------------------------------
+    % INFORMATIONS CANDIDAT
+    % --------------------------------------------------------
+    {\normalsize Passage par la voie de la formation --- parcours de 19 mois achevé en mars 2026}\\[0.6cm]
+    {\normalsize #4}\\[0.4cm]
+    {\small #5}\\[0.4cm]
+    \vfill
+    {\normalsize\MakeUppercase{#6}}
+
+  \end{center}
+
+  \newpage
+  % Réinitialisation couleurs corps du document
+  \pagecolor{white}
+  \color{black}
+}

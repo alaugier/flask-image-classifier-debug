@@ -225,7 +225,7 @@ def preprocess_from_pil(pil_img: Image.Image) -> np.ndarray:
     logger.info(f"Image redimensionnée à: {img.size}")
     
     # Convertir en array et normaliser
-    img_array = np.asarray(img, dtype=np.float32) / 255.0
+    img_array = np.asarray(img, dtype=np.float32)
     
     # Ajouter l'axe batch
     img_array = np.expand_dims(img_array, axis=0)
