@@ -29,6 +29,8 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
+        # Torch CPU explicite — évite le téléchargement de la version CUDA (~2 Go)
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
         pip install pytest pytest-cov flake8
     
