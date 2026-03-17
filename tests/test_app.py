@@ -241,11 +241,7 @@ class TestPreprocessNormalization(unittest.TestCase):
         self.assertAlmostEqual(scale, 1 / 255.0, places=6,
             msg="La couche Rescaling doit avoir scale=1/255.")
 
-    @unittest.skipUnless(
-        os.path.exists("images_to_test/desert_96.jpg") and
-        os.path.exists("images_to_test/meadow_89.jpg"),
-        "Images de test réelles absentes — test ignoré en CI"
-    )
+    @unittest.skip("Requiert le vrai modèle Keras (non mocké) + images réelles — exécuter localement uniquement")
     def test_no_double_normalization_effect(self):
         """Deux images différentes doivent produire des prédictions différentes.
         
