@@ -199,6 +199,69 @@ class TestModelIntegration(unittest.TestCase):
         self.assertAlmostEqual(np.sum(predictions[0]), 1.0, places=1,
                              msg="Les probabilités doivent approximativement sommer à 1")
 
+class TestPreprocessNormalization(unittest.TestCase):
+    """Vérifie la cohérence preprocessing / couche Rescaling du modèle."""
+
+    def test_no_manual_normalization(self):
+        """Les valeurs de sortie doivent rester dans [0, 255], pas [0, 1].
+        
+        Documente le Bug 2 (double normalisation) et son correctif :
+        la division /255.0 a été supprimée du preprocessing,
+        la couche Rescaling(scale=1/255) du modèle s'en charge.
+        """
+        test_img = Image.new('RGB', (224, 224), color=(255, 255, 255))
+        processed = preprocess_from_pil(test_img)
+
+        self.assertGreater(
+            processed.max(), 1.0,
+            "Les pixels ne doivent PAS être normalisés dans le preprocessing "
+            "(la couche Rescaling du modèle s'en charge)."
+        )
+        self.assertAlmostEqual(
+            float(processed.max()), 255.0, delta=1.0,
+            msg="Les pixels blancs doivent valoir ~255 après preprocessing."
+        )
+
+    @unittest.skip("Requiert le vrai modèle Keras — non disponible en CI (modèle mocké)")
+    def test_rescaling_layer_present_in_model(self):
+        """Vérifie que le modèle contient bien une couche Rescaling(1/255).
+        
+        À exécuter localement avec le vrai modèle :
+            python -m pytest tests/test_app.py::TestPreprocessNormalization::test_rescaling_layer_present_in_model -v
+        """
+        from app_correct import model as real_model
+        rescaling_layers = [
+            l for l in real_model.layers
+            if l.__class__.__name__ == 'Rescaling'
+        ]
+        self.assertGreater(len(rescaling_layers), 0,
+            "Le modèle doit contenir au moins une couche Rescaling.")
+        scale = rescaling_layers[0].get_config().get('scale', None)
+        self.assertIsNotNone(scale)
+        self.assertAlmostEqual(scale, 1 / 255.0, places=6,
+            msg="La couche Rescaling doit avoir scale=1/255.")
+
+    @unittest.skipUnless(
+        os.path.exists("images_to_test/desert_96.jpg") and
+        os.path.exists("images_to_test/meadow_89.jpg"),
+        "Images de test réelles absentes — test ignoré en CI"
+    )
+    def test_no_double_normalization_effect(self):
+        """Deux images différentes doivent produire des prédictions différentes.
+        
+        Symptôme de la double normalisation : prédictions identiques pour toutes les images.
+        Utilise desert_96.jpg et meadow_89.jpg (disponibles dans le repo).
+        """
+        from app_correct import model as real_model
+        img1 = Image.open("images_to_test/desert_96.jpg")
+        img2 = Image.open("images_to_test/meadow_89.jpg")
+        pred1 = real_model.predict(preprocess_from_pil(img1), verbose=0)
+        pred2 = real_model.predict(preprocess_from_pil(img2), verbose=0)
+        self.assertFalse(
+            np.allclose(pred1, pred2, atol=1e-3),
+            "Prédictions identiques = symptôme de double normalisation."
+        )
+
 if __name__ == '__main__':
     # Créer le dossier logs si nécessaire
     os.makedirs('logs', exist_ok=True)
