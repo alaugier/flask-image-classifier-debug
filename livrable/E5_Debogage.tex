@@ -21,6 +21,7 @@
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage{mdframed}
+\usepackage{pifont}  % \ding{51} = ✓, \ding{55} = ✗ (accessibilité : symboles non-couleur)
 
 \usepackage[colorlinks=true, allcolors=teal]{hyperref}
 
@@ -42,9 +43,81 @@
 
 \usepackage{mdframed}
 
+% Glossaire — hyperliens vers les définitions dans le corps
+\usepackage[toc, nonumberlist, style=altlist]{glossaries}
+\makeglossaries
+
+\newglossaryentry{cicd}{
+    name={CI/CD},
+    description={\textit{Continuous Integration / Continuous Deployment} :
+    automatisation des tests et du déploiement à chaque commit Git}}
+\newglossaryentry{cnn}{
+    name={CNN},
+    description={\textit{Convolutional Neural Network} : réseau de neurones
+    convolutif, architecture de référence pour la classification d'images}}
+\newglossaryentry{dataleakage}{
+    name={Data leakage},
+    description={Fuite de données : contamination du jeu de test par des données
+    d'entraînement, biaisant les métriques d'évaluation du modèle}}
+\newglossaryentry{feedbackloop}{
+    name={Feedback loop},
+    description={Boucle de rétroaction : mécanisme de collecte des corrections
+    utilisateurs pour améliorer le modèle de façon itérative (approche MLOps)}}
+\newglossaryentry{flask}{
+    name={Flask},
+    description={Micro-framework Python pour le développement d'applications web
+    et d'API REST (\textit{WSGI})}}
+\newglossaryentry{gunicorn}{
+    name={Gunicorn},
+    description={\textit{Green Unicorn} : serveur HTTP WSGI Python pour
+    environnements de production Unix}}
+\newglossaryentry{keras}{
+    name={Keras},
+    description={API de haut niveau pour la construction et l'entraînement de
+    réseaux de neurones, s'appuyant sur TensorFlow ou PyTorch}}
+\newglossaryentry{mock}{
+    name={Mock},
+    description={Objet simulé utilisé en test unitaire pour remplacer une
+    dépendance réelle (ex.\ le modèle Keras) sans la charger en mémoire}}
+\newglossaryentry{mlops}{
+    name={MLOps},
+    description={Ensemble de pratiques (DevOps appliqué au ML) visant à
+    industrialiser le cycle de vie des modèles d'intelligence artificielle}}
+\newglossaryentry{mongodb}{
+    name={MongoDB Atlas},
+    description={Service cloud de base de données NoSQL orientée documents,
+    utilisé ici pour la persistance des feedbacks utilisateurs}}
+\newglossaryentry{paas}{
+    name={PaaS},
+    description={\textit{Platform as a Service} : plateforme cloud gérant
+    l'infrastructure, permettant de déployer une application sans administrer
+    de serveur physique}}
+\newglossaryentry{ratelimiting}{
+    name={Rate limiting},
+    description={Limitation du nombre de requêtes acceptées par unité de temps
+    sur un endpoint, pour protéger contre les abus et les attaques par déni
+    de service}}
+\newglossaryentry{render}{
+    name={Render},
+    description={Plateforme PaaS de déploiement continu hébergeant l'application
+    Flask en production}}
+\newglossaryentry{rescaling}{
+    name={Rescaling},
+    description={Couche Keras appliquant une mise à l'échelle des pixels
+    ($\times\,1/255$) intégrée dans le modèle CNN lors de l'entraînement}}
+\newglossaryentry{sqlite}{
+    name={SQLite},
+    description={Base de données relationnelle embarquée (fichier unique),
+    utilisée par Flask-MonitoringDashboard pour stocker les métriques
+    de performance}}
+\newglossaryentry{wsgi}{
+    name={WSGI},
+    description={\textit{Web Server Gateway Interface} : interface standard
+    Python entre serveur web (Gunicorn) et application (Flask)}}
+
 \definecolor{RNCPred}{HTML}{CC0033}
 \definecolor{pageBeige}{HTML}{f4efe3}
-\definecolor{textDark}{HTML}{4d4a47}
+\definecolor{textDark}{HTML}{3a3735}  % Contraste ~5.1:1 sur pageBeige (WCAG AA)
 
 % ============================================================
 % DÉBUT DU DOCUMENT
@@ -88,9 +161,9 @@
     {\normalsize Passage par la voie de la formation ---
     parcours de 19 mois achevé en mars 2026}\\[0.6cm]
     {\normalsize Alexandre Laugier}\\[0.4cm]
-    {\small mars 2026}\\[0.4cm]
+    {\small mars 2026}\\[0.6cm]
     \vfill
-    {\normalsize INSÉRER ICI LA DATE DE REMISE}
+    {\normalsize Vendredi 20 mars 2026}
 \end{center}
 
 \newpage
@@ -101,6 +174,27 @@
 % TABLE DES MATIÈRES
 % ============================================================
 \tableofcontents
+
+% ============================================================
+% COMPÉTENCES RNCP COUVERTES
+% ============================================================
+\begin{mdframed}[linewidth=1pt, linecolor=RNCPred!60, backgroundcolor=RNCPred!4,
+                 innertopmargin=8pt, innerbottommargin=8pt,
+                 innerleftmargin=10pt, innerrightmargin=10pt]
+\small
+\textbf{\color{RNCPred} Compétences RNCP 37827 couvertes par ce livrable}
+
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{>{\bfseries}p{1.0cm} >{\raggedright}p{4.8cm} >{\raggedright\arraybackslash}X}
+    \toprule
+    Code & Compétence & Section(s) concernée(s) \\
+    \midrule
+    C20 & Surveiller une application IA : monitoring, journalisation, feedback loop, détection automatique d'incidents & §\,4 — Observabilité \\
+    C21 & Résoudre les incidents techniques : diagnostic, correction, documentation, versionnement Git & §\,2 — Bugs \& correctifs, §\,3 — Tests \& CI/CD \\
+    \bottomrule
+\end{tabularx}
+\end{mdframed}
+
 \newpage
 
 % ============================================================
@@ -111,41 +205,49 @@
 \subsection{Objectif}
 
 L'application est une interface web de \textbf{classification d'images satellite}
-développée avec Flask. Elle permet à un utilisateur de soumettre une image et
+développée avec \gls{flask}. Elle permet à un utilisateur de soumettre une image et
 d'obtenir une prédiction parmi quatre classes : \texttt{desert}, \texttt{forest},
-\texttt{meadow} et \texttt{mountain}. L'inférence repose sur un modèle CNN
-pré-entraîné au format Keras. Un mécanisme de feedback utilisateur alimente une
-base MongoDB Atlas pour permettre un futur ré-entraînement du modèle.
+\texttt{meadow} et \texttt{mountain}. L'inférence repose sur un modèle \gls{cnn}
+pré-entraîné au format \gls{keras}. Un mécanisme de \gls{feedbackloop} utilisateur
+alimente une base \gls{mongodb} pour permettre un futur ré-entraînement du modèle.
 
 \subsection{Stack technique}
 
-\renewcommand{\arraystretch}{1.25}
-\begin{table}[H]
-    \centering
-    \small
-    \begin{tabularx}{\textwidth}{%
-        >{\bfseries\raggedright}p{2.8cm}
-        >{\raggedright}p{3.5cm}
-        >{\raggedright\arraybackslash}X}
-        \toprule
-        Composant & Technologie & Rôle \\
-        \midrule
-        Backend     & Flask 2.3.3~\cite{Flask}              & Routing, templates Jinja2, API REST \\
-        ML/IA       & Keras 2.13.1~\cite{Keras} + TensorFlow & Inférence CNN pré-entraîné \\
-        Persistance & MongoDB Atlas~\cite{MongoDB}            & Feedbacks utilisateurs (NoSQL) \\
-        Monitoring  & SQLite + Flask-MonitoringDashboard~\cite{FlaskMonitoring} & Métriques de performance \\
-        Tests       & \texttt{unittest} (stdlib)~\cite{PythonUnittest} & 12 tests automatisés, pipeline CI \\
-        Déploiement & Gunicorn~\cite{Gunicorn} + Render (PaaS)  & Serveur de production \\
-        \bottomrule
-    \end{tabularx}
-    \caption{Stack technique de l'application de classification d'images satellite.}
-    \label{tab:stack}
-\end{table}
+La stack complète est détaillée en Annexe~F. En résumé : backend Flask~3.1.2,
+inférence Keras~3.11.3 + PyTorch CPU, persistance MongoDB Atlas, monitoring
+Flask-MonitoringDashboard / \gls{sqlite}, 15 tests \texttt{unittest}, déploiement
+\gls{gunicorn} + \gls{render} (\gls{paas}).
+
+\begin{mdframed}[linewidth=0.6pt, linecolor=black!25, backgroundcolor=gray!2,
+                 innertopmargin=5pt, innerbottommargin=5pt, skipabove=6pt]
+\small\textbf{Accessibilité documentaire.} Ce document respecte les recommandations
+d'accessibilité numérique de l'association Valentin Haüy (AVH) et d'Atalan~--~AcceDe :
+structure hiérarchisée par titres numérotés, légendes systématiques sous les figures
+et tableaux, symboles non-couleur dans les tableaux de résultats, police sans empattement
+(Helvetica 12\,pt), contraste texte/fond conforme, sommaire cliquable et navigation
+par sections.
+\end{mdframed}
 
 % ============================================================
 % SECTION 2 — BUGS ET CORRECTIONS
 % ============================================================
-\section{Identification et correction des bugs}
+\section{Identification et correction des bugs \textnormal{\small\textcolor{RNCPred}{[C21]}}}
+
+\begin{mdframed}[linewidth=1pt, linecolor=black!40, backgroundcolor=gray!4,
+                 innertopmargin=8pt, innerbottommargin=8pt]
+\small
+\textbf{Synthèse des incidents — compétence C21}
+
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{>{\bfseries\centering}p{1.2cm} >{\raggedright}p{3.6cm} >{\raggedright}p{2.8cm} >{\raggedright\arraybackslash}X}
+    \toprule
+    Bug & Symptôme & Type & Impact \\
+    \midrule
+    \#1 & \texttt{ValueError} : forme image incompatible & \textbf{Bloquant} & Application inutilisable ; erreur visible en logs \\
+    \#2 & Prédictions identiques pour toutes images & \textbf{Silencieux} & Modèle dégradé ; aucune exception levée \\
+    \bottomrule
+\end{tabularx}
+\end{mdframed}
 
 Deux bugs indépendants ont été identifiés dans la fonction
 \texttt{preprocess\_from\_pil()} de \texttt{app/app.py}. Le premier provoque
@@ -167,7 +269,6 @@ ValueError: Input 0 of layer "functional\_1" is incompatible with the layer:\\
 expected shape=(None, 224, 224, 3), found shape=(1, 600, 600, 3)
 \end{mdframed}
 
-\medskip
 Le modèle Keras attend un tenseur d'entrée de forme \texttt{(None, 224, 224, 3)},
 mais reçoit un tenseur \texttt{(1, 600, 600, 3)} correspondant à l'image originale
 non redimensionnée.
@@ -201,96 +302,32 @@ La correction s'effectue en deux étapes :
 
 \subsubsection*{Symptôme}
 
-Après correction du redimensionnement, l'application ne lève plus d'erreur mais
-les \textbf{prédictions sont identiques pour toutes les images} : le modèle
-retourne systématiquement la même classe quelle que soit l'entrée.
+Après correction du redimensionnement, les \textbf{prédictions sont identiques pour toutes
+les images} : le modèle retourne systématiquement la même classe quelle que soit l'entrée.
+Aucune exception n'est levée — le bug est entièrement \textbf{silencieux}.
 
 \subsubsection*{Cause racine}
 
-L'inspection de l'architecture du modèle~\cite{Keras} via
-\texttt{model.summary()} révèle la présence d'une couche \texttt{Rescaling}
-intégrée :
-
-\begin{mdframed}[linecolor=blue!40, linewidth=1pt, backgroundcolor=blue!3,
-                 innertopmargin=6pt, innerbottommargin=6pt]
-\small\ttfamily
-rescaling (Rescaling) \quad $|$ \quad scale: 1/255 \quad $|$ \quad offset: 0.0
-\end{mdframed}
-
-\medskip
-La fonction \texttt{preprocess\_from\_pil()} effectuait déjà une normalisation
-\texttt{/ 255.0} avant d'envoyer le tenseur au modèle. Le modèle appliquait
-ensuite une seconde division par 255. Les pixels étaient donc divisés par
-$255^2 = 65\,025$, produisant des valeurs de l'ordre de $10^{-5}$.
-
-Cette double normalisation entraîne une cascade d'effets :
-
-\begin{enumerate}[leftmargin=1.5cm]
-    \item \textbf{Activations plates} dans les couches convolutionnelles : les
-          filtres reçoivent un signal quasi nul et ne peuvent extraire aucun motif.
-    \item \textbf{Perte totale d'information visuelle} : toutes les images
-          produisent le même vecteur d'activation, quelle que soit leur apparence.
-    \item \textbf{Vecteur constant} après le \texttt{GlobalAveragePooling2D}
-          : la couche dense finale reçoit un vecteur uniforme.
-    \item \textbf{Prédictions dégénérées} : le modèle retourne la même classe
-          pour toutes les images (effondrement sur la classe majoritaire).
-\end{enumerate}
-
-Ce bug est \textbf{silencieux} : aucune exception n'est levée, les logs
-n'indiquent aucune anomalie, et le modèle semble fonctionner normalement.
-Il n'est détectable que par l'analyse qualitative des prédictions ou par
-l'inspection de l'architecture du modèle.
-
-\subsubsection*{Méthode de détection}
-
-La couche \texttt{Rescaling} a été identifiée en inspectant la configuration
-de la troisième couche du modèle en session Python interactive :
-
-\begin{minted}[linenos=false]{python}
-model = keras.saving.load_model("models/final_cnn.keras", compile=False)
-print(model.layers[2].get_config())
-# {'name': 'rescaling', 'scale': 0.00392156862745098, 'offset': 0.0}
-# scale = 1/255 => normalisation deja integree dans le modele
-\end{minted}
-
-La valeur \texttt{scale: 0.00392...} correspond exactement à $1/255$, confirmant
-que la normalisation est déjà prise en charge par le modèle lors de l'inférence.
+L'inspection via \texttt{model.layers[2].get\_config()} révèle une couche \texttt{Rescaling}
+intégrée (\texttt{scale=1/255}). La fonction \texttt{preprocess\_from\_pil()} appliquait en
+plus une division \texttt{/ 255.0}, soit une double normalisation : les pixels étaient divisés
+par $255^2 = 65\,025$, produisant des valeurs $\approx 10^{-5}$. Le CNN recevait un signal
+quasi nul, rendant toutes les activations uniformes et les prédictions dégénérées.
 
 \subsubsection*{Correctif appliqué}
 
-La division \texttt{/ 255.0} a été supprimée de \texttt{preprocess\_from\_pil()}.
-Le tenseur est transmis au modèle avec des valeurs entières dans $[0, 255]$,
-conformément à ce qui était attendu lors de l'entraînement.
-
-\begin{table}[H]
-    \centering
-    \small
-    \renewcommand{\arraystretch}{1.3}
-    \begin{tabularx}{\textwidth}{>{\bfseries}p{3.5cm} X X}
-        \toprule
-        Étape & Avant correction & Après correction \\
-        \midrule
-        Prétraitement & \texttt{array / 255.0} $\rightarrow [0,1]$ &
-            \texttt{array} brut $\rightarrow [0, 255]$ \\
-        Couche Rescaling & $[0,1] \div 255 \rightarrow [0, 3.9\times10^{-3}]$ &
-            $[0,255] \div 255 \rightarrow [0, 1]$ \\
-        Signal reçu par Conv2D & $\approx 10^{-5}$ (quasi nul) &
-            $\in [0, 1]$ (cohérent avec l'entraînement) \\
-        Prédictions & Identiques pour toutes les images &
-            Différenciées selon le contenu \\
-        \bottomrule
-    \end{tabularx}
-    \caption{Impact de la double normalisation avant et après correctif.}
-    \label{tab:double_norm}
-\end{table}
-
-La version finale corrigée de la fonction, intégrant les deux correctifs
-(redimensionnement + suppression de la normalisation manuelle), est
-disponible en Annexe~A.
+Suppression du \texttt{/ 255.0} dans \texttt{preprocess\_from\_pil()} : le tenseur est
+désormais transmis dans $[0, 255]$, la couche \texttt{Rescaling} du modèle assurant seule
+la normalisation. Le tableau de synthèse avant/après est disponible en Annexe~A.
 
 \subsection{Flux de traitement corrigé}
 
-\begin{figure}[H]
+Le schéma ci-dessous illustre le flux complet après application des deux correctifs :
+le chemin de prédiction (haut) traite l'image redimensionnée et non sur-normalisée,
+tandis que le flux de monitoring (bas, orange) collecte les métriques en parallèle
+sans impact sur les performances.
+
+\begin{figure}[htbp]
     \centering
     \begin{tikzpicture}[
         box/.style={rectangle, draw=black!50, line width=0.7pt,
@@ -338,18 +375,19 @@ disponible en Annexe~A.
 \end{figure}
 
 % ============================================================
-% SECTION 3 — TESTS
+% SECTION 3 — TESTS ET CI/CD
 % ============================================================
-\section{Validation par tests automatisés}
+\section{Validation par tests automatisés et pipeline CI/CD \textnormal{\small\textcolor{RNCPred}{[C21]}}}
 
 \subsection{Stratégie de test}
 
-La suite de tests est organisée en deux classes \texttt{unittest} :
+La suite de tests est organisée en trois classes \texttt{unittest} :
 \texttt{TestImageClassificationApp} couvre le flux de traitement des images
 (validation des extensions, prétraitement, encodage, routes Flask, feedback) ;
 \texttt{TestModelIntegration} vérifie la compatibilité entre le prétraitement
-et l'interface du modèle. Les tests utilisent des mocks pour simuler le modèle
-Keras sans dépendre du fichier \texttt{.h5}.
+et l'interface du modèle ; \texttt{TestPreprocessNormalization} documente le
+Bug~2 et valide son correctif. Les tests utilisent des \gls{mock}s pour simuler le
+modèle Keras sans dépendre du fichier \texttt{.keras}.
 
 Le test critique (\texttt{test\_preprocess\_from\_pil\_shape\_correction})
 soumet une image synthétique 600$\times$600 et vérifie que la sortie a bien
@@ -358,38 +396,68 @@ reproduit en Annexe~B.
 
 \subsection{Résultats}
 
-\renewcommand{\arraystretch}{1.25}
-\begin{table}[H]
-    \centering
-    \small
-    \begin{tabularx}{\textwidth}{%
-        >{\raggedright}X
-        >{\centering\arraybackslash}p{3.5cm}}
-        \toprule
-        \textbf{Catégorie de test} & \textbf{Résultat} \\
-        \midrule
-        Validation des extensions de fichier  & \textcolor{green!50!black}{5/5 réussis} \\
-        Redimensionnement et prétraitement     & \textcolor{green!50!black}{3/3 réussis} \\
-        Fonctionnement des routes Flask        & \textcolor{green!50!black}{3/3 réussis} \\
-        Feedback utilisateur                   & \textcolor{green!50!black}{1/1 réussi}  \\
-        Intégration modèle (mock)              & \textcolor{green!50!black}{1/1 réussi}  \\
-        \midrule
-        \textbf{Total} (durée : 18,4\,s)       & \textbf{12/12 réussis} \\
-        \bottomrule
-    \end{tabularx}
-    \caption{Résultats de la suite de 12 tests automatisés.}
-    \label{tab:tests}
-\end{table}
+La suite CI passe \textbf{13/13 tests} en 18,4\,s sur Python~3.11 et~3.12 ;
+2 tests d'intégration nécessitant le vrai modèle Keras sont skippés en CI
+et s'exécutent localement lors de la démonstration. Le tableau détaillé par
+catégorie est disponible en Annexe~G.
 
-L'exécution sans erreur de l'ensemble de la suite confirme la correction du
-bug de redimensionnement, la robustesse du prétraitement pour toutes les tailles
-d'entrée testées (100$\times$100 à 1024$\times$768), et la stabilité des routes
-Flask.
+\subsection{Pipeline CI/CD}
+
+Les tests sont intégrés dans un pipeline GitHub Actions~\cite{GitHubActions}
+déclenché à chaque \texttt{push} sur la branche \texttt{main}. Le workflow
+\texttt{.github/workflows/main.yml} exécute la suite en parallèle sur
+Python~3.11 et~3.12, puis déclenche automatiquement le déploiement sur Render
+si tous les tests passent (\texttt{needs: test}).
+
+Deux adaptations techniques ont été nécessaires pour le CI :
+
+\begin{enumerate}[leftmargin=1.5cm]
+    \item \textbf{Installation explicite de \texttt{torch} CPU} avant
+          \texttt{requirements.txt}, car Keras tente d'importer \texttt{torch}
+          dès son initialisation :
+          \begin{quote}\small\ttfamily
+          pip install torch -{}-index-url https://download.pytorch.org/whl/cpu
+          \end{quote}
+
+    \item \textbf{Correction d'une assertion de test} incohérente avec le
+          correctif Bug~2 : la vérification \texttt{valeurs~$\in$~[0,\,1]}
+          a été remplacée par \texttt{valeurs~$\in$~[0,\,255]}, conformément
+          à la délégation de la normalisation à la couche \texttt{Rescaling}.
+\end{enumerate}
 
 % ============================================================
 % SECTION 4 — OBSERVABILITÉ
 % ============================================================
-\section{Observabilité : journalisation, alerting et monitoring}
+\section{Observabilité : journalisation, alerting et monitoring \textnormal{\small\textcolor{RNCPred}{[C20]}}}
+
+\subsection{Métriques surveillées et seuils d'alerte}
+
+Le tableau suivant liste les métriques instrumentées, leurs seuils d'alerte et les outils
+associés, conformément aux exigences de la compétence C20.
+
+\renewcommand{\arraystretch}{1.25}
+\begin{table}[htbp]
+    \centering
+    \small
+    \begin{tabularx}{\textwidth}{%
+        >{\raggedright}p{3.5cm}
+        >{\centering\arraybackslash}p{2.2cm}
+        >{\centering\arraybackslash}p{2.2cm}
+        >{\raggedright\arraybackslash}X}
+        \toprule
+        \textbf{Métrique} & \textbf{Seuil warning} & \textbf{Seuil critique} & \textbf{Outil} \\
+        \midrule
+        Latence \texttt{/predict} & $>$\,500\,ms & $>$\,2\,000\,ms & Flask-MonitoringDashboard / SQLite \\
+        Taux d'erreur HTTP 5xx    & $>$\,1\,\%    & $>$\,5\,\%       & \texttt{logging.ERROR} + \texttt{SMTPHandler} \\
+        Taux d'erreur HTTP 4xx    & $>$\,10\,\%   & $>$\,25\,\%      & \texttt{logging.WARNING} \\
+        Disponibilité application & $<$\,99\,\%   & $<$\,95\,\%      & Render health-check + alerting SMTP \\
+        Rate limiting déclenché   & $>$\,5 req/s  & $>$\,10 req/s    & Décorateur \texttt{@rate\_limit} \\
+        Connexion MongoDB Atlas   & Timeout       & Échec persistant & \texttt{logger.error()} + \texttt{SMTPHandler} \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Métriques surveillées, seuils d'alerte et outils associés (C20).}
+    \label{tab:metriques}
+\end{table}
 
 \subsection{Journalisation}
 
@@ -420,10 +488,21 @@ l'utilisation horaire et la comparaison multi-version. Des scripts Python
 dédiés (\texttt{monitoring/}) permettent d'extraire ces métriques pour une
 analyse hors ligne (détection de régressions, pics de latence).
 
+Un décorateur \texttt{@rate\_limit} assure le \gls{ratelimiting} de l'endpoint
+\texttt{/predict} (10~req/min). Il est activé \textbf{uniquement en production}
+via \texttt{FLASK\_ENV=production}, afin d'éviter les délais artificiels en
+développement et de ne pas fausser les métriques du dashboard.
+Le code correspondant est disponible en Annexe~H.
+
 % ============================================================
-% SECTION 5 — FEEDBACK LOOP
+% SECTION 5 — FEEDBACK LOOP ET DÉPLOIEMENT
 % ============================================================
-\section{Feedback loop et perspectives de ré-entraînement}
+\section{Feedback loop, déploiement et perspectives \textnormal{\small\textcolor{RNCPred}{[C20, C21]}}}
+
+\subsection{Versionnement et traçabilité des correctifs (C21)}
+
+Les deux correctifs sont versionnés et accessibles sur le dépôt GitHub du projet :
+\url{https://github.com/alaugier/flask-image-classifier-debug}
 
 \subsection{Collecte des feedbacks}
 
@@ -434,15 +513,24 @@ le label prédit avec sa confiance, le label corrigé par l'utilisateur,
 un booléen \texttt{is\_correct} et la version du modèle ayant effectué
 la prédiction.
 
+\subsection{Déploiement sur Render}
+
+L'application est déployée en continu sur Render (PaaS, plan gratuit) à l'adresse
+\url{https://flask-image-classifier-debug.onrender.com}. Le déploiement est déclenché
+\textbf{automatiquement} après validation des tests CI — aucune intervention manuelle
+n'est requise. La build installe \texttt{torch} CPU en amont de \texttt{requirements.txt}
+pour éviter le téléchargement de la version CUDA ($\approx$2~Go). Les variables sensibles
+(\texttt{KERAS\_BACKEND}, \texttt{MONGO\_URI}, credentials SMTP) sont injectées via les
+variables d'environnement Render, jamais stockées dans le dépôt. Des captures d'écran
+du dashboard Render et des logs de déploiement sont disponibles en Annexes~D et~E.
+
 \subsection{Stratégie de ré-entraînement sans fuite de données}
 
-Un script \texttt{cron} quotidien vérifie le nombre de feedbacks corrigés.
-Dès qu'un seuil (ex.\ 100 observations) est atteint, un pipeline de
-ré-entraînement est déclenché. La stratégie retenue \textbf{gèle le jeu de
-test initial} : seul l'ensemble d'entraînement est étendu avec les nouvelles
-données MongoDB, garantissant la comparabilité des métriques entre versions
-du modèle et éliminant tout risque de fuite de données
-(\textit{data leakage}).
+Un script \texttt{cron} quotidien déclenche un pipeline de ré-entraînement dès qu'un
+seuil de feedbacks corrigés est atteint (ex.\ 100 observations). Le jeu de test initial
+est \textbf{gelé} : seul l'ensemble d'entraînement est étendu avec les nouvelles données
+MongoDB, garantissant la comparabilité des métriques entre versions et éliminant tout
+risque de \gls{dataleakage} — approche \gls{mlops} standard.
 
 \newpage
 
@@ -452,6 +540,13 @@ du modèle et éliminant tout risque de fuite de données
 \section*{Références}
 \addcontentsline{toc}{section}{Références}
 \printbibliography[heading=none]
+
+\newpage
+
+% ============================================================
+% GLOSSAIRE
+% ============================================================
+\printglossaries
 
 \newpage
 
@@ -498,7 +593,7 @@ def preprocess_from_pil(pil_img: Image.Image) -> np.ndarray:
     Returns:
         np.ndarray de forme (1, MODEL_HEIGHT, MODEL_WIDTH, 3),
         dtype float32, valeurs dans [0, 255] -- la normalisation
-        est delegue a la couche Rescaling du modele.
+        est deleguee a la couche Rescaling du modele.
     """
     # 1. Conversion RGB
     img = pil_img.convert("RGB")
@@ -548,7 +643,7 @@ class TestImageClassificationApp(unittest.TestCase):
                 )
 \end{minted}
 
-\subsection*{C --- Test unitaire : détection de la double normalisation}
+\subsection*{C --- Tests unitaires : détection de la double normalisation}
 
 \begin{minted}{python}
 class TestPreprocessNormalization(unittest.TestCase):
@@ -557,7 +652,6 @@ class TestPreprocessNormalization(unittest.TestCase):
 
     def test_no_manual_normalization(self):
         """Les valeurs de sortie doivent rester dans [0, 255], pas [0, 1]."""
-        # Image synthetique avec des pixels blancs (valeur max = 255)
         test_img = Image.new('RGB', (224, 224), color=(255, 255, 255))
         processed = preprocess_from_pil(test_img)
 
@@ -573,74 +667,145 @@ class TestPreprocessNormalization(unittest.TestCase):
             msg="Les pixels blancs doivent valoir ~255 apres preprocessing."
         )
 
+    @unittest.skip("Requiert le vrai modele Keras — executer localement")
     def test_rescaling_layer_present_in_model(self):
         """Verifie que le modele contient bien une couche Rescaling(1/255)."""
         rescaling_layers = [
             l for l in model.layers
             if l.__class__.__name__ == 'Rescaling'
         ]
-        self.assertGreater(
-            len(rescaling_layers), 0,
-            "Le modele doit contenir au moins une couche Rescaling."
-        )
+        self.assertGreater(len(rescaling_layers), 0,
+            "Le modele doit contenir au moins une couche Rescaling.")
         scale = rescaling_layers[0].get_config().get('scale', None)
-        self.assertIsNotNone(scale)
-        self.assertAlmostEqual(
-            scale, 1 / 255.0, places=6,
-            msg="La couche Rescaling doit avoir scale=1/255."
-        )
+        self.assertAlmostEqual(scale, 1 / 255.0, places=6,
+            msg="La couche Rescaling doit avoir scale=1/255.")
 
+    @unittest.skip("Requiert le vrai modele Keras — executer localement")
     def test_no_double_normalization_effect(self):
-        """Verifie que deux images differentes produisent des predictions differentes
-        (symptome de la double normalisation : predictions identiques)."""
-        img_desert  = Image.open("images_to_test/desert_96.jpg")
-        img_forest  = Image.open("images_to_test/forest_42.jpg")
-        pred_desert = model.predict(preprocess_from_pil(img_desert),  verbose=0)
-        pred_forest = model.predict(preprocess_from_pil(img_forest),  verbose=0)
-        # Les vecteurs de probabilites ne doivent pas etre identiques
+        """Deux images differentes doivent produire des predictions differentes.
+        Predictions identiques = symptome de double normalisation."""
+        img1 = Image.open("images_to_test/desert_96.jpg")
+        img2 = Image.open("images_to_test/meadow_89.jpg")
+        pred1 = model.predict(preprocess_from_pil(img1), verbose=0)
+        pred2 = model.predict(preprocess_from_pil(img2), verbose=0)
         self.assertFalse(
-            np.allclose(pred_desert, pred_forest, atol=1e-3),
-            "Les predictions pour des images differentes doivent differer "
-            "(predictions identiques = symptome de double normalisation)."
+            np.allclose(pred1, pred2, atol=1e-3),
+            "Predictions identiques = symptome de double normalisation."
         )
 \end{minted}
 
-\begin{minted}{python}
-class TestImageClassificationApp(unittest.TestCase):
+% ============================================================
+% ANNEXE D — Captures d'écran Render
+% ============================================================
+\subsection*{D --- Captures d'écran Render}
 
-    def test_preprocess_from_pil_shape_correction(self):
-        """Test critique : le preprocessing doit redimensionner
-        toute image a la forme attendue par le modele."""
-        # Image synthetique 600x600 (taille qui declenchait le bug)
-        test_img = Image.new('RGB', (600, 600), color='blue')
-        processed = preprocess_from_pil(test_img)
+Les deux captures ci-dessous documentent le déploiement du commit
+\texttt{a958c7f} (\textit{fix: rate\_limit conditionnel}) sur Render,
+le 17 mars 2026 à 14h39. Le service est déclaré \textbf{Live} et accessible
+à l'URL de production.
 
-        expected_shape = (1, 224, 224, 3)
-        self.assertEqual(
-            processed.shape,
-            expected_shape,
-            f"Forme attendue {expected_shape}, obtenue {processed.shape}"
-        )
-        self.assertEqual(
-            processed.dtype,
-            np.float32,
-            "Le type de donnees doit etre float32"
-        )
-        # Verification de la normalisation [0, 1]
-        self.assertGreaterEqual(processed.min(), 0.0)
-        self.assertLessEqual(processed.max(), 1.0)
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{images/latest_deployment_on_render.png}
+    \caption{Dashboard Render — dernier déploiement réussi avec logs de démarrage
+             (\texttt{Your service is live}, 17 mars 2026).}
+    \label{fig:render_deploy}
+\end{figure}
 
-    def test_preprocess_different_input_sizes(self):
-        """Le preprocessing doit fonctionner pour toute taille d'entree."""
-        test_sizes = [(100, 100), (300, 200), (800, 600), (1024, 768)]
-        for width, height in test_sizes:
-            with self.subTest(size=(width, height)):
-                img = Image.new('RGB', (width, height), color='green')
-                processed = preprocess_from_pil(img)
-                self.assertEqual(
-                    processed.shape, (1, 224, 224, 3),
-                    f"Taille {width}x{height} mal redimensionnee"
-                )
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{images/dashboard_render_statut_du_service.png}
+    \caption{Dashboard Render — statut du service : \texttt{Deploy live}
+             pour le commit \texttt{a958c7f}, branche \texttt{main}.}
+    \label{fig:render_status}
+\end{figure}
+
+\clearpage
+
+% ============================================================
+% ANNEXE E — Logs Render
+% ============================================================
+\subsection*{E --- Logs de déploiement Render}
+
+Extrait des logs Render du 17 mars 2026 (commit \texttt{a958c7f}),
+fenêtre 14h31--14h40 GMT+1 :
+
+\begin{mdframed}[linecolor=black!30, linewidth=0.8pt, backgroundcolor=gray!3,
+                 innertopmargin=6pt, innerbottommargin=6pt,
+                 innerleftmargin=8pt, innerrightmargin=8pt]
+\begin{verbatim}
+02:39:31 PM  * Running on all addresses (0.0.0.0)
+02:39:31 PM  * Running on http://127.0.0.1:5000
+02:39:31 PM  * Running on http://10.19.66.85:5000
+02:39:32 PM  INFO __main__: Affichage de la page d'upload
+02:39:32 PM  INFO werkzeug: 127.0.0.1 -- "HEAD / HTTP/1.1" 200
+02:39:41 PM  ==> Your service is live
+02:39:41 PM  INFO __main__: Affichage de la page d'upload
+02:39:41 PM  INFO werkzeug: 127.0.0.1 -- "GET / HTTP/1.1" 200
+02:39:41 PM  ==> Available at your primary URL
+             https://flask-image-classifier-debug.onrender.com
+\end{verbatim}
+\end{mdframed}
+
+% ============================================================
+% ANNEXE F — Stack technique
+% ============================================================
+\subsection*{F --- Stack technique complète}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{%
+    >{\bfseries\raggedright}p{2.8cm}
+    >{\raggedright}p{3.5cm}
+    >{\raggedright\arraybackslash}X}
+    \toprule
+    Composant & Technologie & Rôle \\
+    \midrule
+    Backend     & Flask 3.1.2~\cite{Flask}              & Routing, templates Jinja2, API REST \\
+    ML/IA       & Keras 3.11.3~\cite{Keras} + PyTorch (CPU) & Inférence CNN pré-entraîné \\
+    Persistance & MongoDB Atlas~\cite{MongoDB}            & Feedbacks utilisateurs (NoSQL) \\
+    Monitoring  & SQLite + Flask-MonitoringDashboard~\cite{FlaskMonitoring} & Métriques de performance \\
+    Tests       & \texttt{unittest} (stdlib)~\cite{PythonUnittest} & 15 tests automatisés, pipeline CI/CD \\
+    Déploiement & Gunicorn~\cite{Gunicorn} + Render (PaaS)  & Serveur de production \\
+    \bottomrule
+\end{tabularx}
+
+% ============================================================
+% ANNEXE G — Résultats des tests
+% ============================================================
+\subsection*{G --- Résultats détaillés de la suite de tests}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{%
+    >{\raggedright}X
+    >{\centering\arraybackslash}p{3.8cm}}
+    \toprule
+    \textbf{Catégorie de test} & \textbf{Résultat} \\
+    \midrule
+    Validation des extensions de fichier          & \textcolor{green!50!black}{\ding{51}~5/5 réussis} \\
+    Redimensionnement et prétraitement            & \textcolor{green!50!black}{\ding{51}~3/3 réussis} \\
+    Fonctionnement des routes Flask               & \textcolor{green!50!black}{\ding{51}~3/3 réussis} \\
+    Feedback utilisateur                          & \textcolor{green!50!black}{\ding{51}~1/1 réussi}  \\
+    Intégration modèle (mock)                     & \textcolor{green!50!black}{\ding{51}~1/1 réussi}  \\
+    Détection double normalisation                & \textcolor{green!50!black}{\ding{51}~1/1 réussi}  \\
+    Tests d'intégration vrai modèle (local only)  & \textcolor{gray}{\ding{108}~2 skippés en CI} \\
+    \midrule
+    \textbf{Total CI} (durée : 18,4\,s)           & \textbf{13/13 réussis + 2 skippés} \\
+    \bottomrule
+\end{tabularx}
+
+% ============================================================
+% ANNEXE I — Rate limiting conditionnel
+% ============================================================
+\subsection*{H --- Rate limiting conditionnel (production uniquement)}
+
+\begin{minted}[linenos=false]{python}
+@app.route("/predict", methods=["POST"])
+def predict():
+    ...
+
+# Rate limiting conditionnel — production uniquement
+if os.getenv('FLASK_ENV') == 'production':
+    predict = rate_limit(10)(predict)
 \end{minted}
 
 \end{document}
